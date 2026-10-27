@@ -30,7 +30,7 @@ NAME_TTL_S = 3600
 TIMEOUT_S = 10
 WORKERS = 12
 POINT_RADIUS_KM = 1.5            # for a place that is a point (a park, a landmark) rather than an area
-BIAS_RADIUS_M = 60000            # prefer matches near the measured area
+BIAS_RADIUS_M = 50000            # prefer matches near the measured area (Places rejects anything over 50,000 m)
 NEIGHBOURHOOD_TYPES = {"neighborhood", "sublocality", "sublocality_level_1"}
 AREA_TYPES = NEIGHBOURHOOD_TYPES | {"locality", "postal_code", "administrative_area_level_3"}
 LOOKUP_DOWN = "Google Maps place lookup is unavailable right now."
@@ -69,7 +69,7 @@ def reverse_neighbourhood(lat: float, lon: float) -> str | None:
 
 def search_place(query: str, near: tuple[float, float]) -> dict[str, Any] | None:
     """Places text search: the best match for a typed name, with its map bounds."""
-    body = {"textQuery": query, "maxResultCount": 3, "languageCode": "en",
+    body = {"textQuery": query, "pageSize": 3, "languageCode": "en",
             "locationBias": {"circle": {"center": {"latitude": near[0], "longitude": near[1]}, "radius": BIAS_RADIUS_M}}}
     try:
         response = _session().post(PLACES_URL, json=body, timeout=TIMEOUT_S, headers=_headers({
@@ -197,7 +197,13 @@ def resolve_area(query: str, tracts: list[dict[str, Any]]) -> dict[str, Any]:
             if not tracts:
                 raise ToolError("No tracts are loaded.")
             centre = (sum(t["lat"] for t in tracts) / len(tracts), sum(t["lon"] for t in tracts) / len(tracts))
-            place = search_place(f"{q}, {load_settings().city}", centre)
+            try:
+                place = search_place(f"{q}, {load_settings().city}", centre)
+            except ToolError:
+                # Google Maps is occasionally unavailable. Say so plainly and offer what still works, instead of failing.
+                return {"status": "not_found", "area": q.title(),
+                        "message": f"Google Maps could not look up \"{q.title()}\" right now. Try a ZIP code (for example 75215) or one of these areas.",
+                        "suggestions": [a["name"] for a in known_areas(tracts, 6)]}
             if place:
                 loc = place.get("location") or {}
                 point = (loc["latitude"], loc["longitude"]) if loc else None
