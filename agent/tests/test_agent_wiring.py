@@ -13,4 +13,10 @@ def test_every_specialist_has_tools_and_a_description():
 
 def test_prediction_agent_owns_the_model_tools():
     agent = next(a for a in root_agent.sub_agents if a.name == "prediction_analyst")
-    assert {t.__name__ for t in agent.tools} == {"predict_heat_offset", "rank_response_sites"}
+    assert {t.__name__ for t in agent.tools} == {
+        "predict_heat_offset",
+        "rank_response_sites",
+        "dispatch_today_fleet",
+        "recommend_cooling_centers",
+        "plan_tree_canopy",
+    }

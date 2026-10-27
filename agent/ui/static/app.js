@@ -52,6 +52,57 @@
       h("div", { class: "tablewrap" }, h("table", {}, h("thead", {}, head), h("tbody", {}, body))));
   }
 
+  function track1DispatchCard(r) {
+    const sum = r.hydration_summary || {};
+    const hHead = h("tr", {}, ["#", "Tract", "Offset °F", "Trucks", "Fire Engine", "Population"].map((t, i) => h("th", { class: i >= 2 ? "n" : "" }, t)));
+    const hBody = (r.hydration_dispatches || []).map((d, i) => h("tr", {},
+      h("td", {}, i + 1), h("td", {}, d.geo_id), h("td", { class: "n" }, signed(d.predicted_offset_f)),
+      h("td", { class: "n" }, d.trucks_assigned), h("td", { class: "n" }, d.fire_engine_support ? "Yes (Misting)" : "No"),
+      h("td", { class: "n" }, fmt(d.total_pop, 0))));
+    const wHead = h("tr", {}, ["#", "Tract", "Offset °F", "Median age", "Built yr", "No car", "Score"].map((t, i) => h("th", { class: i >= 2 ? "n" : "" }, t)));
+    const wBody = (r.wellness_checks || []).map((w, i) => h("tr", {},
+      h("td", {}, i + 1), h("td", {}, w.geo_id), h("td", { class: "n" }, signed(w.predicted_offset_f)),
+      h("td", { class: "n" }, fmt(w.median_age)), h("td", { class: "n" }, w.median_year_structure_built),
+      h("td", { class: "n" }, pct(w.no_vehicle_rate)), h("td", { class: "n" }, fmt(w.wellness_priority_score, 2))));
+    return h("div", { class: "card" },
+      h("h3", {}, r.track || "Track 1 — Today (Emergency Dispatch)"),
+      h("div", { class: "kpis", style: "margin-bottom:12px" },
+        h("div", { class: "kpi" }, h("div", { class: "v hot" }, `${sum.trucks_deployed || 0} / 20`), h("div", { class: "l" }, "hydration trucks deployed")),
+        h("div", { class: "kpi" }, h("div", { class: "v" }, fmt(sum.fire_engine_co_dispatches, 0)), h("div", { class: "l" }, "fire-engine misting zones")),
+        h("div", { class: "kpi" }, h("div", { class: "v" }, `${(r.wellness_checks || []).length} / 10`), h("div", { class: "l" }, "mobile wellness check units"))),
+      h("h3", {}, "Hydration Truck & Fire Engine Zones"),
+      h("div", { class: "tablewrap" }, h("table", {}, h("thead", {}, hHead), h("tbody", {}, hBody))),
+      h("h3", { style: "margin-top:14px" }, "Mobile Wellness Check Units (Max 10)"),
+      h("div", { class: "tablewrap" }, h("table", {}, h("thead", {}, wHead), h("tbody", {}, wBody))));
+  }
+
+  function track2CoolingCard(r) {
+    const head = h("tr", {}, ["#", "Tract", "Offset °F", "No car", "Poverty", "Nearest Library (Supplementary Cooling)", "Dist km"].map((t, i) => h("th", { class: (i >= 2 && i <= 4) || i === 6 ? "n" : "" }, t)));
+    const body = (r.cooling_centers || []).map((c, i) => {
+      const lib = c.nearest_library || {};
+      return h("tr", {},
+        h("td", {}, i + 1), h("td", {}, c.geo_id), h("td", { class: "n" }, signed(c.predicted_offset_f)),
+        h("td", { class: "n" }, pct(c.no_vehicle_rate)), h("td", { class: "n" }, pct(c.poverty_rate)),
+        h("td", {}, `${lib.name || "n/a"} (${lib.address || ""})`), h("td", { class: "n" }, fmt(lib.distance_km, 2)));
+    });
+    return h("div", { class: "card" },
+      h("h3", {}, r.track || "Track 2 — Permanent Cooling Centers (Max 3)"),
+      h("div", { class: "mute", style: "font-size:13px;margin-bottom:8px" }, (r.guardrails || {}).supplementary_cooling_policy || ""),
+      h("div", { class: "tablewrap" }, h("table", {}, h("thead", {}, head), h("tbody", {}, body))));
+  }
+
+  function track3CanopyCard(r) {
+    const head = h("tr", {}, ["#", "Tract", "Peak Offset °F", "Built yr", "Score", "Recommended Canopy Action"].map((t, i) => h("th", { class: i >= 2 && i <= 4 ? "n" : "" }, t)));
+    const body = (r.canopy_zones || []).map((z, i) => h("tr", {},
+      h("td", {}, i + 1), h("td", {}, z.geo_id), h("td", { class: "n" }, signed(z.predicted_offset_f)),
+      h("td", { class: "n" }, z.median_year_structure_built), h("td", { class: "n" }, fmt(z.canopy_priority_score, 2)),
+      h("td", {}, z.recommended_action)));
+    return h("div", { class: "card" },
+      h("h3", {}, r.track || "Track 3 — Decade Tree Canopy Relief Plan"),
+      h("div", { class: "mute", style: "font-size:13px;margin-bottom:8px" }, r.modeling_guardrail || ""),
+      h("div", { class: "tablewrap" }, h("table", {}, h("thead", {}, head), h("tbody", {}, body))));
+  }
+
   function frequencyCard(r) {
     const data = r.days_per_year || [];
     const card = h("div", { class: "card" }, h("h3", {}, `Days at or above ${fmt(r.threshold_f, 0)} °F, by year`));
@@ -80,7 +131,15 @@
       h("div", { class: "mute", style: "font-size:13px;margin-top:8px" }, r.note));
   }
 
-  const RENDER = { predict_heat_offset: offsetCard, rank_response_sites: sitesCard, heat_frequency: frequencyCard, community_profile: communityCard };
+  const RENDER = {
+    predict_heat_offset: offsetCard,
+    rank_response_sites: sitesCard,
+    dispatch_today_fleet: track1DispatchCard,
+    recommend_cooling_centers: track2CoolingCard,
+    plan_tree_canopy: track3CanopyCard,
+    heat_frequency: frequencyCard,
+    community_profile: communityCard,
+  };
 
   function cardFor(c) {
     const r = c.result || {};

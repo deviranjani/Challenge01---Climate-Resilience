@@ -129,3 +129,84 @@ def test_community_profile_ok(monkeypatch):
     result = community.community_profile(32.7, -96.8, 3)
     assert result["status"] == "ok"
     assert result["median_age"] == 33.5 and result["no_vehicle_rate"] is None
+
+
+def _sample_tract_rows():
+    return [
+        {
+            "geo_id": f"4811300{i:02d}00",
+            "latitude": 32.75 + i * 0.01,
+            "longitude": -96.80 + i * 0.01,
+            "predicted_offset_f": 1.0 + i * 0.6,
+            "no_vehicle_rate": 0.05 + i * 0.03,
+            "poverty_rate": 0.10 + i * 0.04,
+            "median_age": 32.0 + i * 2.5,
+            "median_year_structure_built": 1990 - i * 5,
+            "total_pop": 2500 + i * 900,
+            "top_feature_attributions": [
+                {"feature": "dist_center_km", "attribution": 0.8 + i * 0.1},
+                {"feature": "median_year_structure_built", "attribution": 0.4},
+            ],
+        }
+        for i in range(8)
+    ]
+
+
+def test_track1_dispatch_today_fleet_guardrails_and_scaling(monkeypatch):
+    from heat_planner.tools import tracks
+
+    # Guardrail: max 20 hydration trucks, max 10 wellness check units
+    assert tracks.dispatch_today_fleet(hydration_trucks=21, wellness_units=10)["status"] == "error"
+    assert tracks.dispatch_today_fleet(hydration_trucks=20, wellness_units=11)["status"] == "error"
+    assert tracks.dispatch_today_fleet(hydration_trucks=0, wellness_units=5)["status"] == "error"
+
+    monkeypatch.setattr(tracks, "run_query", fake_runner(_sample_tract_rows()))
+    res = tracks.dispatch_today_fleet(hydration_trucks=12, wellness_units=5)
+    assert res["status"] == "ok"
+    assert res["track"] == "Track 1 — Today (Emergency Dispatch)"
+    assert res["guardrails"]["max_hydration_trucks"] == 20
+    assert res["guardrails"]["max_wellness_units"] == 10
+    assert res["hydration_summary"]["trucks_deployed"] <= 12
+    assert sum(d["trucks_assigned"] for d in res["hydration_dispatches"]) == res["hydration_summary"]["trucks_deployed"]
+    # High-severity heat area gets multiple hydration trucks and fire engine misting support
+    assert res["hydration_dispatches"][0]["trucks_assigned"] >= 2
+    assert res["hydration_dispatches"][0]["fire_engine_support"] is True
+    assert res["hydration_dispatches"][0]["fire_dispatch_reason"]
+    assert len(res["wellness_checks"]) == 5
+
+
+def test_track2_recommend_cooling_centers_cap_and_nearest_library(monkeypatch):
+    from heat_planner.tools import tracks
+
+    # Guardrail: strictly at most 3 permanent cooling centers
+    assert tracks.recommend_cooling_centers(max_centers=4)["status"] == "error"
+    assert tracks.recommend_cooling_centers(max_centers=0)["status"] == "error"
+
+    station_rows = [{"avg_hot_days": 42.5, "years_observed": 7}]
+    monkeypatch.setattr(tracks, "run_query", fake_runner(_sample_tract_rows(), station_rows))
+    res = tracks.recommend_cooling_centers(max_centers=3)
+    assert res["status"] == "ok"
+    assert res["track"] == "Track 2 — This Budget Cycle (Permanent Cooling Centers)"
+    assert res["guardrails"]["max_permanent_cooling_centers"] == 3
+    assert len(res["cooling_centers"]) == 3
+    first = res["cooling_centers"][0]
+    assert "nearest_library" in first
+    assert first["nearest_library"]["name"]
+    assert first["nearest_library"]["distance_km"] >= 0.0
+
+
+def test_track3_plan_tree_canopy_ranks_peak_relief_with_guardrail(monkeypatch):
+    from heat_planner.tools import tracks
+
+    assert tracks.plan_tree_canopy(top_n=0)["status"] == "error"
+    assert tracks.plan_tree_canopy(top_n=11)["status"] == "error"
+
+    monkeypatch.setattr(tracks, "run_query", fake_runner(_sample_tract_rows()))
+    res = tracks.plan_tree_canopy(top_n=4)
+    assert res["status"] == "ok"
+    assert res["track"] == "Track 3 — This Decade (10-Year Tree Canopy Plan)"
+    assert len(res["canopy_zones"]) == 4
+    top_zone = res["canopy_zones"][0]
+    assert top_zone["canopy_priority_score"] >= res["canopy_zones"][1]["canopy_priority_score"]
+    assert top_zone["recommended_action"]
+    assert "counterfactual" in res["modeling_guardrail"].lower() or "simulation" in res["modeling_guardrail"].lower()

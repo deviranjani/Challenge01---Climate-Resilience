@@ -11,12 +11,24 @@ def client():
 
 def test_index_and_static_are_served(client):
     assert "Heat Planner" in client.get("/").text
-    assert client.get("/static/app.js").status_code == 200
+    js_text = client.get("/static/app.js").text
+    assert "dispatch_today_fleet" in js_text
+    assert "recommend_cooling_centers" in js_text
+    assert "plan_tree_canopy" in js_text
 
 
 def test_health_and_starters(client):
-    assert client.get("/api/health").json()["ok"] is True
-    assert len(client.get("/api/starters").json()["suggestions"]) >= 3
+    health = client.get("/api/health").json()
+    assert health["ok"] is True
+    assert health["guardrails"] == {
+        "max_hydration_trucks": 20,
+        "max_wellness_units": 10,
+        "max_cooling_centers": 3,
+    }
+    starters = client.get("/api/starters").json()["suggestions"]
+    assert len(starters) >= 4
+    joined = " ".join(starters).lower()
+    assert "hydration" in joined and "cooling center" in joined and "tree" in joined
 
 
 def test_chat_passes_history_and_returns_result(client, monkeypatch):

@@ -38,18 +38,32 @@ async def server_error(_, exc: Exception):
 @app.get("/api/health")
 def health():
     s = load_settings()
-    return {"ok": True, "city": s.city, "dataset": s.dataset, "bqml_model": s.model_name, "llm_model": s.llm_model}
+    return {
+        "ok": True,
+        "city": s.city,
+        "dataset": s.dataset,
+        "bqml_model": s.model_name,
+        "llm_model": s.llm_model,
+        "guardrails": {
+            "max_hydration_trucks": config.MAX_HYDRATION_TRUCKS,
+            "max_wellness_units": config.MAX_WELLNESS_UNITS,
+            "max_cooling_centers": config.MAX_COOLING_CENTERS,
+        },
+    }
 
 
 @app.get("/api/starters")
 def starters():
     city = load_settings().city
-    return {"suggestions": [
-        f"Where should we send hydration trucks first in {city}?",
-        "How often does it reach 100F, and is it getting worse?",
-        "How much hotter than average is latitude 32.78, longitude -96.80, and why?",
-        "Who lives within 2 km of latitude 32.78, longitude -96.80?",
-    ]}
+    return {
+        "suggestions": [
+            f"Track 1 (Today): Where should we send our 20 hydration trucks (and fire engines) and 10 mobile wellness checks in {city}?",
+            f"Track 2 (Budget Cycle): Which 3 areas in {city} benefit most from a permanent cooling center, and what is the nearest library for each?",
+            f"Track 3 (Decade): Where does tree planting buy the most peak-time heat relief in {city} over the next decade?",
+            "How often does it reach 100F, and is it getting worse?",
+            "How much hotter than average is latitude 32.78, longitude -96.80, and why?",
+        ]
+    }
 
 
 @app.post("/api/chat")

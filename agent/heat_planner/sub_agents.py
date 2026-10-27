@@ -7,7 +7,15 @@ from google.adk.agents import Agent
 from . import callbacks, prompts
 from .config import load_settings
 from .context import AgentContext
-from .tools import community_profile, heat_frequency, predict_heat_offset, rank_response_sites
+from .tools import (
+    community_profile,
+    dispatch_today_fleet,
+    heat_frequency,
+    plan_tree_canopy,
+    predict_heat_offset,
+    rank_response_sites,
+    recommend_cooling_centers,
+)
 
 
 def _instruction(text: str):
@@ -23,9 +31,17 @@ def build_sub_agents(ctx: AgentContext, model: Any = None) -> list[Agent]:
             name="prediction_analyst",
             model=model,
             description="Predicts how much hotter or cooler a location is than average, explains why, "
-            "and ranks where heat relief should go first. Uses the BigQuery ML model.",
+            "and runs all three decision tracks: Track 1 (Today: up to 20 hydration trucks + fire engines "
+            "and 10 mobile wellness checks), Track 2 (Budget Cycle: up to 3 permanent cooling centers + "
+            "nearest library), and Track 3 (Decade: 10-year tree canopy planting plan).",
             instruction=_instruction(prompts.PREDICTION),
-            tools=[predict_heat_offset, rank_response_sites],
+            tools=[
+                predict_heat_offset,
+                rank_response_sites,
+                dispatch_today_fleet,
+                recommend_cooling_centers,
+                plan_tree_canopy,
+            ],
             **shared,
         ),
         Agent(
