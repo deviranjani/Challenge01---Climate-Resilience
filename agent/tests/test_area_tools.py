@@ -50,15 +50,17 @@ def test_community_profile_compares_the_area_with_the_city():
 
 def test_cooling_centers_tool_validates_and_adds_heat_days(monkeypatch):
     monkeypatch.setattr(siting, "heat_frequency", lambda t: {"status": "ok", "average_days": 38.0, "peak_year": 2022, "peak_days": 65, "trend": "No clear trend"})
-    assert siting.recommend_cooling_centers(0)["status"] == "error"
-    assert siting.recommend_cooling_centers(2, radius_km=99)["status"] == "error"
-    out = siting.recommend_cooling_centers(2, 1.5, 100000)
+    assert siting.recommend_cooling_centers(radius_km=99)["status"] == "error"
+    out = siting.recommend_cooling_centers(1.5, 100000)
     assert out["status"] == "ok" and out["heat_days"]["peak_year"] == 2022 and out["total_cost_usd"] == 100000 * out["count"]
+    import inspect
+
+    assert "count" not in inspect.signature(siting.recommend_cooling_centers).parameters  # the number of centers is not a choice
 
 
 def test_cooling_centers_tool_survives_missing_station_history(monkeypatch):
     monkeypatch.setattr(siting, "heat_frequency", lambda t: {"status": "error", "message": "no history"})
-    assert siting.recommend_cooling_centers(1)["heat_days"] is None
+    assert siting.recommend_cooling_centers()["heat_days"] is None
 
 
 def test_planting_tool_never_claims_which_intervention():
@@ -81,10 +83,10 @@ def test_track_endpoints_return_decisions_from_the_tract_data(client, monkeypatc
     monkeypatch.setattr(api, "heat_frequency", lambda t: {"status": "ok", "average_days": 38.0, "peak_year": 2022, "peak_days": 65, "trend": "t", "days_per_year": []})
     today = client.get("/api/today?focus=wellness&limit=2").json()
     assert today["focus"] == "wellness" and len(today["sites"]) == 2
-    budget = client.get("/api/budget?count=2&radius_km=2&cost_per_center=50000").json()
+    budget = client.get("/api/budget?radius_km=2&cost_per_center=50000").json()
     assert budget["count"] >= 1 and budget["heat_days"]["peak_year"] == 2022 and budget["total_cost_usd"] == 50000 * budget["count"]
     assert client.get("/api/trees?limit=2").json()["sites"][0]["intervention"] == "undetermined"
-    assert client.get("/api/today?focus=nonsense").status_code == 422 and client.get("/api/budget?count=99").status_code == 422
+    assert client.get("/api/today?focus=nonsense").status_code == 422 and client.get("/api/budget?radius_km=99").status_code == 422
 
 
 def test_areas_endpoint_lists_named_areas(client):
@@ -111,7 +113,7 @@ def test_proposal_is_drafted_only_from_the_figures(client, monkeypatch):
     fake = FakeGenai()
     monkeypatch.setattr(proposal, "make_client", lambda: fake)
     monkeypatch.setattr(api, "heat_frequency", lambda t: {"status": "ok", "average_days": 38.0, "peak_year": 2022, "peak_days": 65, "trend": "t"})
-    res = client.post("/api/proposal", json={"track": "budget", "count": 2})
+    res = client.post("/api/proposal", json={"track": "budget", "count": 7})  # an unknown count is ignored: three are funded
     assert res.status_code == 200 and res.json()["text"].startswith("Recommendation") and res.json()["track"] == "budget"
     assert "model" not in res.json()
     assert "Use ONLY the figures" in fake.prompt and "Oak Cliff" in fake.prompt and "city council" in fake.prompt
@@ -126,3 +128,32 @@ def test_proposal_failure_is_a_plain_503(client, monkeypatch):
     monkeypatch.setattr(proposal, "make_client", boom)
     res = client.post("/api/proposal", json={"track": "trees"})
     assert res.status_code == 503 and "quota" not in res.text
+
+
+def test_proposals_use_the_proposal_model_not_the_chat_model(monkeypatch):
+    seen = {}
+
+    class Spy(FakeGenai):
+        def generate_content(self, model, contents, config):
+            seen["model"] = model
+            return super().generate_content(model, contents, config)
+
+    monkeypatch.setenv("HEAT_AGENT_MODEL", "gemini-3.8-flash")
+    monkeypatch.setenv("HEAT_PROPOSAL_MODEL", "gemini-4-argon")
+    proposal.draft("trees", {"status": "ok", "sites": []}, client=Spy())
+    assert seen["model"] == "gemini-4-argon"
+
+
+def test_fleet_endpoint_returns_a_plan_that_adds_up(client):
+    res = client.get("/api/fleet?focus=hydration&units=6").json()
+    assert res["status"] == "ok" and res["units"] == 6 and sum(p["units"] for p in res["plan"]) == 6
+    assert client.get("/api/fleet?units=0").status_code == 422 and client.get("/api/fleet?units=99").status_code == 422
+    assert client.get("/api/fleet?focus=nope").status_code == 422
+
+
+def test_budget_endpoint_includes_the_coverage_curve_but_the_chat_tool_does_not(client, monkeypatch):
+    monkeypatch.setattr(api, "heat_frequency", lambda t: {"status": "ok", "average_days": 38.0, "peak_year": 2022, "peak_days": 65, "trend": "t", "days_per_year": []})
+    budget = client.get("/api/budget").json()
+    assert 1 <= len(budget["curve"]) <= 3 and client.get("/api/budget?count=7").json()["count"] <= 3  # a count cannot be requested
+    monkeypatch.setattr(siting, "heat_frequency", lambda t: {"status": "ok", "average_days": 38.0, "peak_year": 2022, "peak_days": 65, "trend": "t"})
+    assert "curve" not in siting.recommend_cooling_centers(2)

@@ -36,10 +36,10 @@ def make_client() -> genai.Client:
 def draft(track: str, result: dict[str, Any], client: Any = None) -> dict[str, Any]:
     s = load_settings()
     config = types.GenerateContentConfig(temperature=0.2)
-    if s.thinking_level and s.llm_model.startswith("gemini-4"):
+    if s.thinking_level and s.proposal_model.startswith("gemini-4"):
         config = types.GenerateContentConfig(temperature=0.2, thinking_config=types.ThinkingConfig(thinking_level=s.thinking_level))
     keep = {k: v for k, v in result.items() if k not in {"status"}}
     prompt = PROMPT.format(audience=AUDIENCE.get(track, "a city planner"), figures=json.dumps(keep, default=str)[:12000])
     genai_client = client or make_client()  # keep a reference: a temporary client is closed when it is garbage-collected
-    response = genai_client.models.generate_content(model=s.llm_model, contents=prompt, config=config)
+    response = genai_client.models.generate_content(model=s.proposal_model, contents=prompt, config=config)
     return {"text": (response.text or "").strip(), "track": track}

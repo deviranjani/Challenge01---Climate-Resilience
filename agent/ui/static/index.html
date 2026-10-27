@@ -29,6 +29,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
       </button>
     </div>
+    <div class="notice-row" role="note">
+      <span class="n-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg><span><b>Good to know:</b> place names and map details come from Google Maps, which is sometimes unavailable. If an area can't be found, try its ZIP code, for example 75215.</span></span>
+      <span class="n-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/><circle cx="12" cy="12" r="9"/></svg><span><b>Built to grow:</b> this version covers Dallas, Texas. The same approach can be extended to every state.</span></span>
+    </div>
   </header>
 
   <!-- ============ left: assistant ============ -->
@@ -105,6 +109,13 @@
         <div class="pane-body scroll" id="forecastBody"><div class="mute pad">Loading forecast…</div></div>
       </article>
 
+      <article class="pane" id="pane-fleet" data-pane="fleet" data-tracks="today">
+        <header class="pane-head"><h2>Fleet plan</h2><span class="badge ghost" id="fleetUnit">trucks</span>
+          <button type="button" class="icon-btn small" data-max aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        </header>
+        <div class="pane-body scroll" id="fleetBody"><div class="mute pad">Loading…</div></div>
+      </article>
+
       <article class="pane" id="pane-history" data-pane="history" data-tracks="budget">
         <header class="pane-head"><h2>How often it gets this hot</h2>
           <div class="seg" id="thrSeg" role="group" aria-label="Threshold">
@@ -115,6 +126,13 @@
           <button type="button" class="icon-btn small" data-max aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
         </header>
         <div class="pane-body scroll" id="historyBody"><div class="mute pad">Loading history…</div></div>
+      </article>
+
+      <article class="pane" id="pane-coverage" data-pane="coverage" data-tracks="budget">
+        <header class="pane-head"><h2>What the three centers cover</h2>
+          <button type="button" class="icon-btn small" data-max aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        </header>
+        <div class="pane-body scroll" id="coverageBody"><div class="mute pad">Waiting for the plan…</div></div>
       </article>
 
       <article class="pane" id="pane-equity" data-pane="equity" data-tracks="today budget trees">
@@ -154,6 +172,7 @@
 <script src="/static/decisions.js"></script>
 <script src="/static/map.js"></script>
 <script src="/static/forecast.js"></script>
+<script src="/static/fleet.js"></script>
 <script src="/static/history.js"></script>
 <script src="/static/graph.js"></script>
 <script src="/static/workspace.js"></script>

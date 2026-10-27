@@ -77,3 +77,45 @@ def test_a_missing_places_service_becomes_a_tool_error(monkeypatch):
     monkeypatch.setattr(areas, "_session", lambda: Boom())
     with pytest.raises(ToolError, match="unavailable"):
         areas.search_place("x", (32.7, -96.8))
+
+
+def test_the_places_radius_stays_inside_googles_limit_and_uses_current_field_names():
+    assert areas.BIAS_RADIUS_M <= 50000  # 60000 made Google answer 400 and every place lookup fail
+
+    sent = {}
+
+    class Ok:
+        def post(self, url, json=None, **k):
+            sent.update(json)
+            return type("R", (), {"raise_for_status": lambda s: None, "json": lambda s: {"places": []}})()
+
+    import heat_planner.areas as a
+
+    a._session.cache_clear()
+    a._session = lambda: Ok()
+    try:
+        a.search_place("Deep Ellum, Dallas", (32.75, -96.8))
+    finally:
+        del a._session  # fall back to the real cached function
+    assert sent["locationBias"]["circle"]["radius"] <= 50000 and sent["pageSize"] == 3 and "maxResultCount" not in sent
+
+
+def test_when_google_maps_is_down_the_answer_is_a_helpful_not_found_not_an_error(monkeypatch):
+    def down(*a):
+        raise ToolError(areas.LOOKUP_DOWN)
+
+    monkeypatch.setattr(areas, "search_place", down)
+    out = areas.resolve_area("Deep Ellum", TRACTS)
+    assert out["status"] == "not_found" and "could not look up" in out["message"] and "ZIP code" in out["message"]
+    assert "Oak Cliff" in out["suggestions"]
+    assert areas.resolve_area("75215", TRACTS)["status"] == "ok"  # ZIP codes never need Google
+
+
+def test_repeated_area_labels_are_made_unique_so_no_two_rows_look_the_same():
+    from heat_planner import tracts
+
+    rows = [{"geo_id": "48113001100", "area": "Turtle Creek · 75219"}, {"geo_id": "48113002200", "area": "Turtle Creek · 75219"}, {"geo_id": "48113003300", "area": "Oak Cliff · 75211"}]
+    out = tracts.disambiguate(rows)
+    assert out[0]["area"] == "Turtle Creek · 75219 (tract 1100)" and out[1]["area"] == "Turtle Creek · 75219 (tract 2200)"
+    assert out[2]["area"] == "Oak Cliff · 75211"  # unique labels are left alone
+    assert len({r["area"] for r in out}) == 3

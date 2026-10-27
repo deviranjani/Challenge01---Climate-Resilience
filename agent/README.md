@@ -36,9 +36,9 @@ what the analysis cannot do. Only the panes that belong to the chosen track are 
 
 | Track | Decision | What we compute (all from BigQuery) | Shown |
 |---|---|---|---|
-| **Today** (emergency response) | Where hydration trucks, wellness checks and extended library hours go first | Areas ranked by predicted heat plus who is least able to cope, with a reason per stop | Map, dispatch list, tomorrow's heat (NWS forecast, a complement), equity audit |
-| **Budget cycle** (cooling centers) | Where permanent cooling centers go | Sites that cover the most heat-exposed, vulnerable people within walking distance without double counting; how often the city reaches 100 F | Map with walking radii, centers, heat-days tracker, equity audit, draft council proposal |
-| **This decade** (tree planting) | Where planting or cool pavement should start | Areas ranked by people x excess heat x poverty; what drives each area's heat | Map, planting priorities, tract graph, equity audit |
+| **Respond Today** (emergency response) | Where hydration trucks, wellness checks and extended library hours go first | Areas ranked by predicted heat plus who is least able to cope, with a reason per stop | Map, dispatch list, tomorrow's heat (NWS forecast, a complement), equity audit |
+| **Fund Cooling Centers** (this budget cycle) | Where permanent cooling centers go | Sites that cover the most heat-exposed, vulnerable people within walking distance without double counting; how often the city reaches 100 F | Map with walking radii, centers, heat-days tracker, equity audit, draft council proposal |
+| **Grow the Canopy** (this decade, tree planting) | Where planting or cool pavement should start | Areas ranked by people x excess heat x poverty; what drives each area's heat | Map, planting priorities, tract graph, equity audit |
 
 The logic is in `heat_planner/tracks.py` as pure functions, so every number traces to a formula. Costs, land use, tree canopy and
 pavement are not in the data, and the app says so instead of estimating them.
@@ -59,9 +59,9 @@ and never stored; the server authenticates with its own service account, so ther
 | Map | Google Maps (map, satellite, aerial, 3D), heat surface, predicted offset per area, the track's decision, walking radii | `/api/map/points`, `/api/map/tracts` |
 | Decision list | Ranked areas with the reason for each, controls, "Draft proposal" | `/api/today`, `/api/budget`, `/api/trees`, `/api/proposal` |
 | Who this reaches | Equity audit of the chosen areas against the city (race is never an input) | in each decision |
-| Tomorrow's heat (Today) | NWS 7-day forecast and a scenario high; expected temperature = scenario + predicted offset | `/api/forecast` |
-| Heat-days tracker (Budget) | Days a year at 95/100/105 F and the trend | `/api/history` |
-| Tract graph (This decade) | Neo4j-style graph of areas linked to heat, poverty, car-access and age groups | `/api/graph` |
+| Tomorrow's heat (Respond Today) | NWS 7-day forecast and a scenario high; expected temperature = scenario + predicted offset | `/api/forecast` |
+| Heat-days tracker (Fund Cooling Centers) | Days a year at 95/100/105 F and the trend | `/api/history` |
+| Tract graph (Grow the Canopy) | Neo4j-style graph of areas linked to heat, poverty, car-access and age groups | `/api/graph` |
 
 ## Customer-facing: nothing about the stack is shown
 
@@ -73,13 +73,14 @@ in this README and in the pitch deck, not in the product.
 
 | Use | Model | Location |
 |---|---|---|
-| Specialist agents (answers) | `gemini-4-argon`, thinking level LOW | `global` |
+| Specialist agents (chat answers) | `gemini-3.8-flash` (`HEAT_AGENT_MODEL`) | `global` |
+| Draft proposals | `gemini-4-argon`, thinking level LOW (`HEAT_PROPOSAL_MODEL`) | `global` |
 | Root agent (routing) | `gemini-3.8-flash` | `global` |
 | Speech to text | `gemini-live-2.5-flash-native-audio` | `us-central1` |
 
-`gemini-4-argon` is slow by default (over a minute for a trivial prompt) because of its long default thinking;
-`LOW` brings that to seconds, but calls still vary from about 4 to 60 s. Set `HEAT_AGENT_MODEL` or
-`HEAT_ROUTER_MODEL` to change either. Only tracts inside the measured area are scored: far outside it the model's
+`gemini-4-argon` is slow: measured from the live logs, its calls had a median of 9 s and 23 s with a p90 of about 65 s, so chat
+uses `gemini-3.8-flash` (about 3 s per call) and Argon is kept for drafting proposals, where a longer wait is fine. Set
+`HEAT_AGENT_MODEL`, `HEAT_ROUTER_MODEL` or `HEAT_PROPOSAL_MODEL` to change any of them. Only tracts inside the measured area are scored: far outside it the model's
 squared-coordinate features extrapolate to tens of degrees. Census "not available" codes (-666666666) are treated as missing.
 
 ## Voice

@@ -25,6 +25,17 @@ def _num(value: Any, digits: int) -> Any:
     return None if value is None else round(float(value), digits)
 
 
+def disambiguate(tracts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Several census tracts can share a neighbourhood and ZIP. Where a label repeats, add the tract's last digits so every row is distinct."""
+    counts: dict[str, int] = {}
+    for t in tracts:
+        counts[t["area"]] = counts.get(t["area"], 0) + 1
+    for t in tracts:
+        if counts[t["area"]] > 1:
+            t["area"] = f"{t['area']} (tract {str(t['geo_id'])[-4:]})"
+    return tracts
+
+
 def _fresh() -> list[dict[str, Any]] | None:
     with _lock:
         hit = _cache.get("all")
@@ -57,6 +68,7 @@ def _build_tracts() -> list[dict[str, Any]]:
             "drivers": modeling.group_drivers(modeling.attributions(r.get("top_feature_attributions"))[:3]),
         })
     areas.annotate(out)
+    disambiguate(out)
     with _lock:
         _cache["all"] = (time.monotonic(), out)
     return out

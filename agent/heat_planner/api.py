@@ -120,9 +120,14 @@ async def today_api(focus: Literal["hydration", "wellness", "cooling_hours"] = "
     return await _decision(tracks.today_sites, focus, limit)
 
 
+@app.get("/api/fleet")
+async def fleet_api(focus: Literal["hydration", "wellness", "cooling_hours"] = "hydration", units: int = Query(12, ge=1, le=40)):
+    return await _decision(tracks.fleet_plan, focus, units)
+
+
 @app.get("/api/budget")
-async def budget_api(count: int = Query(3, ge=1, le=8), radius_km: float = Query(1.5, ge=0.5, le=5.0), cost_per_center: float | None = Query(None, ge=0, le=1e9)):
-    result = await _decision(tracks.cooling_centers, count, radius_km, cost_per_center)
+async def budget_api(radius_km: float = Query(1.5, ge=0.5, le=5.0), cost_per_center: float | None = Query(None, ge=0, le=1e9)):
+    result = await _decision(tracks.cooling_centers, tracks.COOLING_CENTERS, radius_km, cost_per_center)
     days = await asyncio.to_thread(heat_frequency, 100.0)
     result["heat_days"] = None if days.get("status") != "ok" else {"threshold_f": 100, "average_days_per_year": days["average_days"], "peak_year": days["peak_year"],
                                                                       "peak_days": days["peak_days"], "trend": days["trend"], "days_per_year": days["days_per_year"]}
@@ -151,7 +156,6 @@ async def areas_api():
 class ProposalIn(BaseModel):
     track: Literal["today", "budget", "trees"]
     focus: Literal["hydration", "wellness", "cooling_hours"] = "hydration"
-    count: int = Field(3, ge=1, le=8)
     radius_km: float = Field(1.5, ge=0.5, le=5.0)
     cost_per_center: float | None = Field(None, ge=0, le=1e9)
     limit: int = Field(8, ge=1, le=25)
@@ -163,7 +167,7 @@ async def proposal_api(body: ProposalIn):
     if body.track == "today":
         result = await asyncio.to_thread(tracks.today_sites, data, body.focus, body.limit)
     elif body.track == "budget":
-        result = await asyncio.to_thread(tracks.cooling_centers, data, body.count, body.radius_km, body.cost_per_center)
+        result = await asyncio.to_thread(tracks.cooling_centers, data, tracks.COOLING_CENTERS, body.radius_km, body.cost_per_center)
         days = await asyncio.to_thread(heat_frequency, 100.0)
         if days.get("status") == "ok":
             result["heat_days"] = {"threshold_f": 100, "average_days_per_year": days["average_days"], "peak_year": days["peak_year"], "peak_days": days["peak_days"], "trend": days["trend"]}

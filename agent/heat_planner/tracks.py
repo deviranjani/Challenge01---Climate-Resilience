@@ -11,7 +11,7 @@ from .areas import haversine_km
 
 TRACKS: dict[str, dict[str, Any]] = {
     "today": {
-        "id": "today", "title": "Today", "subtitle": "Emergency response", "who": "City emergency management",
+        "id": "today", "title": "Respond Today", "subtitle": "Hydration trucks and wellness checks", "who": "City emergency management",
         "question": "It is 102°F tomorrow. Where do hydration trucks, wellness checks and extended library hours go first?",
         "problem": "Heat is most dangerous for people who cannot leave it: older residents, households without a car, people in the "
                    "hottest blocks. Dispatch has a few trucks and a few hours, so the question is which areas, in what order, and why.",
@@ -24,7 +24,7 @@ TRACKS: dict[str, dict[str, Any]] = {
                       "It cannot see who lives alone or has no air conditioning; age and car access are stand-ins."],
     },
     "budget": {
-        "id": "budget", "title": "This budget cycle", "subtitle": "Cooling centers", "who": "City planning, answerable to a council",
+        "id": "budget", "title": "Fund Cooling Centers", "subtitle": "Where this budget cycle's money goes", "who": "City planning, answerable to a council",
         "question": "We can fund three permanent cooling centers. Where should they go?",
         "problem": "A permanent building has to serve many heat-exposed residents, often, and without two centers competing for the same "
                    "neighbourhood. It also has to survive a council meeting: why here, who does it reach, and how often does it matter.",
@@ -37,7 +37,7 @@ TRACKS: dict[str, dict[str, Any]] = {
                       "Coverage is straight-line distance, not walking routes."],
     },
     "trees": {
-        "id": "trees", "title": "This decade", "subtitle": "Tree planting", "who": "Sustainability and urban forestry",
+        "id": "trees", "title": "Grow the Canopy", "subtitle": "Tree planting for the next decade", "who": "Sustainability and urban forestry",
         "question": "Where would tree planting or cool pavement give the most relief?",
         "problem": "Planting is slow and permanent, so it should start where excess heat, many residents and past under-investment overlap, "
                    "and the plan should be checked against whether it repeats or repairs that history.",
@@ -51,9 +51,9 @@ TRACKS: dict[str, dict[str, Any]] = {
 }
 
 FOCUS = {
-    "hydration": {"label": "Hydration trucks", "weights": {"heat": 0.5, "cars": 0.3, "age": 0.2}},
-    "wellness": {"label": "Wellness checks", "weights": {"age": 0.4, "heat": 0.35, "poverty": 0.25}},
-    "cooling_hours": {"label": "Extended library hours", "weights": {"heat": 0.4, "cars": 0.35, "people": 0.25}},
+    "hydration": {"label": "Hydration trucks", "unit": "truck", "units": "trucks", "weights": {"heat": 0.5, "cars": 0.3, "age": 0.2}},
+    "wellness": {"label": "Wellness checks", "unit": "check team", "units": "check teams", "weights": {"age": 0.4, "heat": 0.35, "poverty": 0.25}},
+    "cooling_hours": {"label": "Extended library hours", "unit": "site", "units": "sites", "weights": {"heat": 0.4, "cars": 0.35, "people": 0.25}},
 }
 EXPOSED_OFFSET_F = 1.0   # "heat-exposed": predicted at least this much hotter than the city average
 
@@ -125,20 +125,62 @@ def today_sites(tracts: list[dict[str, Any]], focus: str = "hydration", top_n: i
             "method": f"score = {formula} (each measure as a z-score across tracts)", "audit": equity_audit(chosen, tracts)}
 
 
+def allocate_fleet(sites: list[dict[str, Any]], units: int) -> list[dict[str, Any]]:
+    """Split a fleet across the ranked areas: one unit each for the top areas first, then the rest in proportion to priority.
+
+    Largest-remainder rounding, so the allocation always adds up to exactly `units`.
+    """
+    if units < 1 or not sites:
+        return []
+    n = min(units, len(sites))
+    give = [1 if i < n else 0 for i in range(len(sites))]
+    extra = units - n
+    if extra > 0:
+        weights = [max(float(s["score"]), 0.05) for s in sites]
+        total = sum(weights)
+        quotas = [extra * w / total for w in weights]
+        floors = [int(q) for q in quotas]
+        for i in sorted(range(len(sites)), key=lambda i: -(quotas[i] - floors[i]))[: extra - sum(floors)]:
+            floors[i] += 1
+        give = [g + f for g, f in zip(give, floors)]
+    return [{"rank": s["rank"], "geo_id": s["geo_id"], "area": s["area"], "lat": s["lat"], "lon": s["lon"], "offset_f": s["offset_f"], "people": s.get("people"),
+             "units": g, "people_per_unit": round((s.get("people") or 0) / g)} for s, g in zip(sites, give) if g > 0]
+
+
+def fleet_plan(tracts: list[dict[str, Any]], focus: str = "hydration", units: int = 12) -> dict[str, Any]:
+    """The Today track's fleet plan: how many trucks (or check teams, or sites) go to each ranked area."""
+    ranked = today_sites(tracts, focus, 10)
+    if ranked["status"] != "ok":
+        return ranked
+    spec = FOCUS[ranked["focus"]]
+    plan = allocate_fleet(ranked["sites"], units)
+    reached = sum(p["people"] or 0 for p in plan)
+    return {"status": "ok", "track": "today", "focus": ranked["focus"], "focus_label": spec["label"], "unit": spec["unit"], "units_name": spec["units"],
+            "units": units, "plan": plan, "areas_served": len(plan), "people_reached": reached, "people_per_unit": round(reached / units) if units else 0,
+            "method": "One unit to each of the top areas first, then the rest in proportion to priority score."}
+
+
 # ------------------------------------------------------------------------------------------------ track 2: budget cycle
 def _need(t: dict[str, Any]) -> float:
     """Heat-exposed vulnerable people: residents × predicted excess heat × (1 + poverty + no-car)."""
     return (t.get("total_pop") or 0) * max(t["offset_f"], 0.0) * (1 + (t.get("poverty_rate") or 0) + (t.get("no_vehicle_rate") or 0))
 
 
-def cooling_centers(tracts: list[dict[str, Any]], count: int = 3, radius_km: float = 1.5, cost_per_center: float | None = None) -> dict[str, Any]:
+COOLING_CENTERS = 3   # the budget funds exactly three permanent centers
+CURVE_ROUNDS = COOLING_CENTERS
+
+
+def cooling_centers(tracts: list[dict[str, Any]], count: int = COOLING_CENTERS, radius_km: float = 1.5, cost_per_center: float | None = None) -> dict[str, Any]:
     weights = {t["geo_id"]: _need(t) for t in tracts}
     total_need = sum(weights.values())
     if total_need <= 0:
         return {"status": "error", "message": "No tract is predicted hotter than average, so there is nothing to cover."}
+    exposed = [t for t in tracts if t["offset_f"] >= EXPOSED_OFFSET_F]
+    exposed_people = sum(t.get("total_pop") or 0 for t in exposed)
     covered: set[str] = set()
-    centers, chosen_tracts = [], []
-    for rank in range(1, count + 1):
+    rounds, curve = [], []
+    people_so_far = gain_so_far = 0
+    for rank in range(1, max(count, CURVE_ROUNDS) + 1):
         best, best_gain, best_members = None, 0.0, []
         for c in tracts:
             members = [t for t in tracts if t["geo_id"] not in covered and haversine_km((c["lat"], c["lon"]), (t["lat"], t["lon"])) <= radius_km]
@@ -148,18 +190,24 @@ def cooling_centers(tracts: list[dict[str, Any]], count: int = 3, radius_km: flo
         if best is None:
             break
         covered.update(t["geo_id"] for t in best_members)
-        chosen_tracts.extend(best_members)
         people = sum(t.get("total_pop") or 0 for t in best_members)
-        hot_weight = sum(max(t["offset_f"], 0) * (t.get("total_pop") or 0) for t in best_members)
-        centers.append({**_site(rank, best, best_gain / total_need, f"covers {people:,} people in {len(best_members)} tracts within {radius_km:g} km"),
-                        "people_covered": people, "tracts_covered": len(best_members), "share_of_need": round(best_gain / total_need, 3),
+        people_so_far += people
+        gain_so_far += best_gain
+        rounds.append((best, best_gain, best_members, people))
+        # What the first `rank` centers would cover: the curve shows where adding another one stops paying off.
+        curve.append({"count": rank, "people_covered": people_so_far, "added": people, "share_of_need": round(gain_so_far / total_need, 3),
+                      "heat_exposed_covered": sum(t.get("total_pop") or 0 for t in exposed if t["geo_id"] in covered)})
+    centers, chosen_tracts = [], []
+    for rank, (best, best_gain, members, people) in enumerate(rounds[:count], start=1):
+        chosen_tracts.extend(members)
+        hot_weight = sum(max(t["offset_f"], 0) * (t.get("total_pop") or 0) for t in members)
+        centers.append({**_site(rank, best, best_gain / total_need, f"covers {people:,} people in {len(members)} tracts within {radius_km:g} km"),
+                        "people_covered": people, "tracts_covered": len(members), "share_of_need": round(best_gain / total_need, 3),
                         "avg_offset_f": round(hot_weight / people, 2) if people else None})
-    exposed = [t for t in tracts if t["offset_f"] >= EXPOSED_OFFSET_F]
-    exposed_people = sum(t.get("total_pop") or 0 for t in exposed)
-    exposed_covered = sum(t.get("total_pop") or 0 for t in exposed if t["geo_id"] in covered)
+    shown = curve[len(centers) - 1] if centers else {"heat_exposed_covered": 0}
     return {"status": "ok", "track": "budget", "centers": centers, "radius_km": radius_km, "count": len(centers),
             "people_covered": sum(c["people_covered"] for c in centers), "share_of_need_covered": round(sum(c["share_of_need"] for c in centers), 3),
-            "heat_exposed_people": exposed_people, "heat_exposed_covered": exposed_covered,
+            "heat_exposed_people": exposed_people, "heat_exposed_covered": shown["heat_exposed_covered"], "curve": curve,
             "total_cost_usd": None if cost_per_center is None else round(cost_per_center * len(centers), 2),
             "cost_note": "Cost and land use are not in the data. Give a cost per center to total it; what a site displaces needs parcel data.",
             "method": "Each site is the tract centre that covers the most not-yet-covered need within the radius. need = people × predicted excess heat × (1 + poverty + no-car share).",
