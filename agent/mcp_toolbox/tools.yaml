@@ -1,0 +1,97 @@
+# MCP Toolbox for Databases configuration (Challenge 1 - Urban Heat Today Track)
+# Run with: toolbox --tools-file agent/mcp_toolbox/tools.yaml
+sources:
+  a4i_bigquery:
+    kind: bigquery
+    project: ${GOOGLE_CLOUD_PROJECT}
+    location: ${GOOGLE_CLOUD_LOCATION:-US}
+
+tools:
+  query_tract_demographics:
+    kind: bigquery-sql
+    source: a4i_bigquery
+    description: >-
+      Look up census tract demographics (population, median age, median income,
+      housing age, poverty rate, and no-vehicle rate) for tracts in the target city.
+    parameters:
+      - name: min_no_vehicle_rate
+        type: float
+        description: Minimum share of households without a vehicle (0.0 to 1.0).
+      - name: row_limit
+        type: integer
+        description: Maximum number of tracts to return (1 to 100).
+    statement: |
+      SELECT
+        LPAD(CAST(geo_id AS STRING), 11, '0') AS geo_id,
+        ROUND(tract_lat, 4) AS tract_lat,
+        ROUND(tract_lon, 4) AS tract_lon,
+        CAST(total_pop AS INT64) AS total_pop,
+        ROUND(median_age, 1) AS median_age,
+        ROUND(median_income, 0) AS median_income,
+        CAST(median_year_structure_built AS INT64) AS median_year_structure_built,
+        ROUND(poverty_rate, 3) AS poverty_rate,
+        ROUND(no_vehicle_rate, 3) AS no_vehicle_rate
+      FROM `a4i_climate.tract_demographics`
+      WHERE total_pop > 0
+        AND no_vehicle_rate >= @min_no_vehicle_rate
+      ORDER BY no_vehicle_rate DESC, poverty_rate DESC
+      LIMIT @row_limit
+
+  query_station_heat_history:
+    kind: bigquery-sql
+    source: a4i_bigquery
+    description: >-
+      Query 7 years of NOAA GHCN-Daily weather station maximum temperatures to
+      determine how often the city crosses a dangerous heat threshold (e.g. 95F or 100F).
+    parameters:
+      - name: threshold_f
+        type: float
+        description: Daily maximum temperature threshold in degrees Fahrenheit (e.g. 95.0 or 100.0).
+    statement: |
+      WITH station_year AS (
+        SELECT
+          EXTRACT(YEAR FROM observation_date) AS obs_year,
+          station_id,
+          COUNTIF(max_temp_f >= @threshold_f) AS hot_days,
+          MAX(max_temp_f) AS peak_temp_f
+        FROM `a4i_climate.station_daily_temps`
+        GROUP BY obs_year, station_id
+      )
+      SELECT
+        obs_year,
+        ROUND(AVG(hot_days), 1) AS avg_hot_days_per_station,
+        ROUND(MAX(peak_temp_f), 1) AS max_recorded_temp_f
+      FROM station_year
+      GROUP BY obs_year
+      ORDER BY obs_year ASC
+
+  query_observed_hotspots:
+    kind: bigquery-sql
+    source: a4i_bigquery
+    description: >-
+      Query historical single-day NOAA Heat Watch street-level traverse observations
+      showing measured temperatures and offsets relative to the campaign mean.
+    parameters:
+      - name: row_limit
+        type: integer
+        description: Maximum number of street observation points to return (1 to 50).
+    statement: |
+      WITH city_mean AS (
+        SELECT AVG(temp_f) AS avg_temp_f
+        FROM `a4i_climate.heat_observations`
+      )
+      SELECT
+        city,
+        ROUND(latitude, 4) AS latitude,
+        ROUND(longitude, 4) AS longitude,
+        ROUND(temp_f, 1) AS temp_f,
+        ROUND(temp_f - (SELECT avg_temp_f FROM city_mean), 1) AS degrees_above_city_average
+      FROM `a4i_climate.heat_observations`
+      ORDER BY temp_f DESC
+      LIMIT @row_limit
+
+toolsets:
+  climate_resilience_tools:
+    - query_tract_demographics
+    - query_station_heat_history
+    - query_observed_hotspots
