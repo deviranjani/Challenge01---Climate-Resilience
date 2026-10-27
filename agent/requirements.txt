@@ -1,4 +1,4 @@
 google-adk>=2.12,<3
-google-cloud-bigquery>=3.40
+google-cloud-bigquery>=3.46.2
 fastapi>=0.115
 uvicorn[standard]>=0.34
