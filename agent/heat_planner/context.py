@@ -11,5 +11,6 @@ class AgentContext:
     cards: list[dict[str, Any]] = field(default_factory=list)
     steps: list[dict[str, Any]] = field(default_factory=list)
     model_calls: int = 0
+    model_started: float = 0.0
     last_text: str = ""
     limit_hit: bool = False

@@ -94,6 +94,8 @@ def run(question: str, history: Optional[list[dict[str, Any]]] = None, model: An
         text = asyncio.run(_converse(build_root_agent(ctx, model), clean_history(history), question))
     except Exception as exc:
         logger.exception("agent run failed")
+        if "ResourceExhausted" in type(exc).__name__ or "429" in str(exc):
+            raise AgentError("The language model is busy right now (rate limited). Wait a few seconds and ask again.") from exc
         raise AgentError(f"The assistant could not answer: {type(exc).__name__}") from exc
     message, followups = split_followups(text or ctx.last_text)
     steps = [{k: v for k, v in s.items() if k != "started"} for s in ctx.steps]

@@ -3,11 +3,21 @@
 from typing import Any
 
 from google.adk.agents import Agent
+from google.adk.planners import BuiltInPlanner
+from google.genai import types
 
 from . import callbacks, prompts
 from .config import load_settings
 from .context import AgentContext
 from .tools import community_profile, heat_frequency, predict_heat_offset, rank_response_sites
+
+
+def thinking_planner(model: Any):
+    """Gemini 4 models need a low thinking level to answer in seconds; other models reject the setting."""
+    level = load_settings().thinking_level
+    if level and isinstance(model, str) and model.startswith("gemini-4"):
+        return BuiltInPlanner(thinking_config=types.ThinkingConfig(thinking_level=level))
+    return None
 
 
 def _instruction(text: str):
@@ -17,7 +27,7 @@ def _instruction(text: str):
 
 def build_sub_agents(ctx: AgentContext, model: Any = None) -> list[Agent]:
     model = model or load_settings().llm_model
-    shared = callbacks.wire(ctx)
+    shared = {**callbacks.wire(ctx), "planner": thinking_planner(model)}
     return [
         Agent(
             name="prediction_analyst",

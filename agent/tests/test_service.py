@@ -83,3 +83,15 @@ def test_step_budget_stops_a_looping_model(monkeypatch):
     loop = [("transfer_to_agent", {"agent_name": "history_analyst"})] + [("heat_frequency", {"threshold_f": 100})] * 20
     out = service.run("loop forever", model=scripted(*loop))
     assert out["stopped_early"] is True
+
+
+def test_rate_limit_gets_a_plain_message(monkeypatch):
+    class _ResourceExhaustedError(Exception):
+        pass
+
+    async def boom(*a, **k):
+        raise _ResourceExhaustedError("429")
+
+    monkeypatch.setattr(service, "_converse", boom)
+    with pytest.raises(service.AgentError, match="busy"):
+        service.run("hello")

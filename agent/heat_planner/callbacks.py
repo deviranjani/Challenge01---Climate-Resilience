@@ -30,6 +30,7 @@ def before_model(ctx: AgentContext) -> Callable:
             text = (ctx.last_text or "") + STOPPED_NOTE
             return LlmResponse(content=types.Content(role="model", parts=[types.Part(text=text)]))
         ctx.model_calls += 1
+        ctx.model_started = time.monotonic()
         return None
 
     return callback
@@ -38,6 +39,8 @@ def before_model(ctx: AgentContext) -> Callable:
 def after_model(ctx: AgentContext) -> Callable:
     def callback(callback_context: CallbackContext, llm_response: LlmResponse) -> Optional[LlmResponse]:
         ctx.last_text = _text_of(llm_response) or ctx.last_text
+        if ctx.model_started:
+            logger.info("model call %d took %.1fs", ctx.model_calls, time.monotonic() - ctx.model_started)
         return None
 
     return callback

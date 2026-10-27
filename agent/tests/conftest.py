@@ -12,5 +12,6 @@ def _env(monkeypatch):
     from heat_planner.tools import prediction
 
     prediction._coverage.cache_clear()
+    prediction.clear_tract_cache()
     yield
     prediction._coverage.cache_clear()

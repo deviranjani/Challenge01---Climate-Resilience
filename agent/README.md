@@ -29,6 +29,45 @@ must match the training table; if the data lane changes features, change them th
 Tool failures never raise to the model: each tool returns `{"status": "error" | "out_of_coverage", ...}`
 and the UI draws it as a notice. Locations outside the measured area are refused before the model is called.
 
+## Workspace
+
+The chat lives in the left panel; the right side is a workspace of panes that follows the conversation
+(ask about a place and the map flies there, ask for the ranking and the tracker highlights it).
+
+| Pane | What it shows | Data |
+|---|---|---|
+| Trackers | Forecast high, peak expected temperature, people in hotter tracts, top priority tract, heat days | all of the below |
+| Live map | Google Maps (map, satellite, aerial, photorealistic 3D), live traffic, a deck.gl heat surface of the measured readings and the model's forecast per tract | `/api/map/points`, `/api/map/tracts` |
+| Forecast and scenario | NWS 7-day forecast; pick a day or a scenario high and see expected temperature by tract | `/api/forecast` |
+| Heat days tracker | Days a year at 95/100/105/110 F and whether that is changing | `/api/history` |
+| Response tracker | Tracts ranked by predicted heat, households without a car and age | `/api/priority` |
+| Tract graph | Neo4j-style graph of tracts linked to heat, poverty, car-access and age groups | `/api/graph` |
+
+Expected temperature = forecast high + the model's predicted offset for a place. The forecast comes from the
+National Weather Service (public domain); the model supplies only the within-city difference.
+
+## Models
+
+| Use | Model | Location |
+|---|---|---|
+| Specialist agents (answers) | `gemini-4-argon`, thinking level LOW | `global` |
+| Root agent (routing) | `gemini-3.8-flash` | `global` |
+| Speech to text | `gemini-live-2.5-flash-native-audio` | `us-central1` |
+
+`gemini-4-argon` is slow by default (over a minute for a trivial prompt) because of its long default thinking;
+`LOW` brings that to seconds, but calls still vary from about 4 to 60 s. Set `HEAT_AGENT_MODEL` or
+`HEAT_ROUTER_MODEL` to change either. Only tracts inside the measured area are scored: far outside it the model's
+squared-coordinate features extrapolate to tens of degrees. Census "not available" codes (-666666666) are treated as missing.
+
+## Voice
+
+The microphone button streams 16 kHz PCM over a same-origin WebSocket (`/api/live`) to the server, which holds the
+Gemini Live session, so no credentials reach the browser. The transcript appears as you speak and is sent as your
+question when you stop (or after 1.8 s of silence). Esc cancels. Sessions are capped at 60 s and 4 at a time.
+
+The Maps key is read from `GOOGLE_MAPS_API_KEY`; restrict it to the Maps JavaScript API and Map Tiles API and to the
+app's URLs (Google does not accept port wildcards, so list each local port).
+
 ## Run it
 
 ```bash

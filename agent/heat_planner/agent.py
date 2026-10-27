@@ -8,21 +8,22 @@ from google.adk.agents import Agent
 from . import callbacks, prompts
 from .config import load_settings
 from .context import AgentContext
-from .sub_agents import build_sub_agents
+from .sub_agents import build_sub_agents, thinking_planner
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 
 def build_root_agent(ctx: AgentContext, model: Any = None) -> Agent:
     settings = load_settings()
-    model = model or settings.llm_model
+    router = model or settings.router_model  # an explicit model (tests) is used everywhere
     return Agent(
         name="heat_planner",
-        model=model,
+        model=router,
         description="Heat-response planning assistant that routes questions to prediction, "
         "history and community specialists.",
         instruction=lambda _readonly_context: prompts.ROOT.format(city=settings.city),
         sub_agents=build_sub_agents(ctx, model),
+        planner=thinking_planner(router),
         **callbacks.wire(ctx),
     )
 

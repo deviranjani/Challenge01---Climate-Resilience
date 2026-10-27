@@ -6,7 +6,9 @@ average. Feature construction mirrors the training table built by the data lane
 """
 
 import functools
+import logging
 import statistics
+import time
 from typing import Any
 
 from google.cloud import bigquery
@@ -15,10 +17,20 @@ from ..bq import ToolError, run_query, table
 from ..config import load_settings
 from ._common import CAVEATS, clamp_int, safe_tool, validate_coordinates
 
+logger = logging.getLogger(__name__)
+
 # How far outside the area volunteers drove (in degrees, roughly 5 km) we still answer.
 COVERAGE_PAD_DEG = 0.05
 TOP_K_FEATURES = 5
 MAX_RANKED_SITES = 25
+MAX_TRACTS = 5000  # a metro area has well under this many census tracts
+
+# The census table uses -666666666 for "not available". Treat impossible values as missing; the
+# model fills in missing inputs itself, so a bad tract degrades to an average guess, not garbage.
+TRACT_CLEAN_SQL = (
+    "IF(t.median_age > 0, t.median_age, NULL) AS median_age, "
+    "IF(t.median_year_structure_built > 1800, t.median_year_structure_built, NULL) AS median_year_structure_built,"
+)
 
 # Feature columns the model was trained on. Order does not matter, names must match.
 FEATURE_SQL = """
@@ -99,7 +111,7 @@ def predict_heat_offset(latitude: float, longitude: float) -> dict[str, Any]:
     SELECT * FROM ML.EXPLAIN_PREDICT(
       MODEL {table(settings, settings.model_name)},
       (SELECT {features},
-              t.median_age, t.median_year_structure_built,
+              {TRACT_CLEAN_SQL}
               t.poverty_rate, t.no_vehicle_rate, t.total_pop
        FROM c, tract t),
       STRUCT({TOP_K_FEATURES} AS top_k_features))"""
@@ -166,21 +178,23 @@ def score_sites(rows: list[dict[str, Any]], weights: tuple[float, float, float])
     return sorted(scored, key=lambda s: s["priority_score"], reverse=True)
 
 
-@safe_tool
-def rank_response_sites(top_n: int = 10) -> dict[str, Any]:
-    """Rank census tracts where heat relief should go first on a hot day.
+_tract_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+TRACT_CACHE_SECONDS = 600
 
-    Combines the model's predicted heat offset with the share of households without a car
-    and median age, so hot places where people cannot easily leave rank highest.
 
-    Args:
-        top_n: How many tracts to return, 1 to 25. Defaults to 10.
+def clear_tract_cache() -> None:
+    _tract_cache.clear()
 
-    Returns:
-        A dict with status and a ranked list of sites (tract id, coordinates, predicted
-        offset, vulnerability measures, priority score and top drivers).
+
+def predict_all_tracts() -> list[dict[str, Any]]:
+    """The model's prediction for every census tract centroid, with its demographics.
+
+    Shared by the ranking tool and the map and graph views, so there is one definition of
+    "what the model says about a tract".
     """
-    top_n = clamp_int(top_n, 1, MAX_RANKED_SITES, "top_n")
+    hit = _tract_cache.get("all")
+    if hit and time.monotonic() - hit[0] < TRACT_CACHE_SECONDS:
+        return hit[1]
     settings = load_settings()
     features = FEATURE_SQL.format(lat="t.tract_lat", lon="t.tract_lon")
     sql = f"""
@@ -189,13 +203,36 @@ def rank_response_sites(top_n: int = 10) -> dict[str, Any]:
     SELECT * FROM ML.EXPLAIN_PREDICT(
       MODEL {table(settings, settings.model_name)},
       (SELECT t.geo_id, {features},
-              t.median_age, t.median_year_structure_built,
+              {TRACT_CLEAN_SQL}
               t.poverty_rate, t.no_vehicle_rate, t.total_pop
        FROM {table(settings, 'tract_demographics')} t, c
        WHERE t.tract_lat IS NOT NULL AND t.tract_lon IS NOT NULL),
       STRUCT(3 AS top_k_features))"""
-    rows = run_query(sql, settings=settings)
-    ranked = score_sites(rows, weights=(0.5, 0.3, 0.2))
+    rows = run_query(sql, settings=settings, max_rows=MAX_TRACTS)
+    # Far outside the measured roads the model's squared-coordinate features extrapolate wildly
+    # (tens of degrees), so only tracts inside the measured area are returned.
+    inside = [r for r in rows if r.get("latitude") is not None and _within_coverage(r["latitude"], r["longitude"])]
+    logger.info("tract predictions: %d of %d tracts inside the measured area", len(inside), len(rows))
+    _tract_cache["all"] = (time.monotonic(), inside)
+    return inside
+
+
+@safe_tool
+def rank_response_sites(top_n: int = 5) -> dict[str, Any]:
+    """Rank census tracts where heat relief should go first on a hot day.
+
+    Combines the model's predicted heat offset with the share of households without a car
+    and median age, so hot places where people cannot easily leave rank highest.
+
+    Args:
+        top_n: How many tracts to return, 1 to 25. Defaults to 5.
+
+    Returns:
+        A dict with status and a ranked list of sites (tract id, coordinates, predicted
+        offset, vulnerability measures, priority score and top drivers).
+    """
+    top_n = clamp_int(top_n, 1, MAX_RANKED_SITES, "top_n")
+    ranked = score_sites(predict_all_tracts(), weights=(0.5, 0.3, 0.2))
     if not ranked:
         raise ToolError("No tracts could be scored; check the model and demographics tables.")
     return {

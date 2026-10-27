@@ -11,7 +11,7 @@ def client():
 
 def test_index_and_static_are_served(client):
     assert "Heat Planner" in client.get("/").text
-    assert client.get("/static/app.js").status_code == 200
+    assert client.get("/static/chat.js").status_code == 200
 
 
 def test_health_and_starters(client):
@@ -46,3 +46,27 @@ def test_chat_maps_agent_failure_to_503(client, monkeypatch):
     monkeypatch.setattr(service, "run", boom)
     res = client.post("/api/chat", json={"question": "hi"})
     assert res.status_code == 503 and "model unavailable" in res.json()["detail"]
+
+
+def test_forecast_history_and_priority_endpoints(client, monkeypatch):
+    from heat_planner import api, forecast
+
+    monkeypatch.setattr(forecast, "get_forecast", lambda *a: {"source": "NWS", "days": [{"date": "2026-10-27", "high_f": 84}]})
+    assert client.get("/api/forecast").json()["days"][0]["high_f"] == 84
+
+    monkeypatch.setattr(api, "heat_frequency", lambda t: {"status": "ok", "threshold_f": t, "days_per_year": []})
+    assert client.get("/api/history?threshold=105").json()["threshold_f"] == 105
+    assert client.get("/api/history?threshold=10").status_code == 422
+
+    monkeypatch.setattr(api, "rank_response_sites", lambda n: {"status": "ok", "sites": [1] * n})
+    assert len(client.get("/api/priority?limit=3").json()["sites"]) == 3
+    monkeypatch.setattr(api, "rank_response_sites", lambda n: {"status": "error", "message": "no model"})
+    assert client.get("/api/priority").status_code == 503
+
+
+def test_live_socket_rejects_other_origins(client):
+    from starlette.websockets import WebSocketDisconnect
+
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/api/live", headers={"origin": "https://evil.example"}):
+            pass

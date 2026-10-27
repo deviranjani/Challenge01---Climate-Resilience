@@ -5,7 +5,8 @@ from dataclasses import dataclass
 
 # Gemini on Vertex AI, authenticated by the runtime service account (no API key to manage).
 os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "true")
-os.environ.setdefault("GOOGLE_CLOUD_LOCATION", os.environ.get("HEAT_VERTEX_LOCATION", "us-central1"))
+# gemini-4-argon is served from the global endpoint; Live models are regional (see live_location).
+os.environ.setdefault("GOOGLE_CLOUD_LOCATION", os.environ.get("HEAT_VERTEX_LOCATION", "global"))
 
 AGENT_MAX_STEPS = int(os.environ.get("HEAT_AGENT_MAX_STEPS", "12"))
 AGENT_HISTORY_TURNS = 12
@@ -18,6 +19,11 @@ class Settings:
     dataset: str
     model_name: str
     llm_model: str
+    router_model: str
+    live_model: str
+    nws_user_agent: str
+    thinking_level: str
+    live_location: str
     city: str
     location: str
     max_bytes_billed: int
@@ -29,7 +35,15 @@ def load_settings() -> Settings:
         project_id=os.environ.get("GOOGLE_CLOUD_PROJECT", ""),
         dataset=os.environ.get("BQ_DATASET", "a4i_climate"),
         model_name=os.environ.get("BQML_MODEL", "offset_model"),
-        llm_model=os.environ.get("HEAT_AGENT_MODEL", "gemini-2.5-flash"),
+        llm_model=os.environ.get("HEAT_AGENT_MODEL", "gemini-4-argon"),
+        # The root agent only picks a specialist, so a fast model keeps chat responsive (Argon takes 25-45s per call).
+        router_model=os.environ.get("HEAT_ROUTER_MODEL", "gemini-3.8-flash"),
+        # gemini-4-argon thinks for over a minute by default; LOW answers in a few seconds. Empty turns it off.
+        thinking_level=os.environ.get("HEAT_THINKING_LEVEL", "LOW"),
+        live_model=os.environ.get("HEAT_LIVE_MODEL", "gemini-live-2.5-flash-native-audio"),
+        live_location=os.environ.get("HEAT_LIVE_LOCATION", "us-central1"),
+        # api.weather.gov asks every client to identify itself.
+        nws_user_agent=os.environ.get("NWS_USER_AGENT", "HeatPlanner/1.0 (hackathon demo)"),
         city=os.environ.get("HEAT_CITY", "Dallas"),
         location=os.environ.get("BQ_LOCATION", "US"),
         # Hard ceiling per query so a bad prompt cannot run up a bill (1 GB).

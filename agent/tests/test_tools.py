@@ -1,3 +1,5 @@
+import datetime
+
 import pytest
 
 from heat_planner.bq import ToolError
@@ -12,7 +14,7 @@ def fake_runner(*responses):
     calls = []
     queue = list(responses)
 
-    def run(sql, params=(), settings=None):
+    def run(sql, params=(), settings=None, max_rows=None):
         calls.append((sql, list(params)))
         return queue.pop(0)
 
@@ -103,19 +105,61 @@ def test_rank_response_sites_limits_results(monkeypatch):
         for i in range(6)
     ]
     monkeypatch.setattr(prediction, "run_query", fake_runner(rows))
+    monkeypatch.setattr(prediction, "_within_coverage", lambda lat, lon: True)
     result = prediction.rank_response_sites(3)
     assert result["status"] == "ok" and len(result["sites"]) == 3
     assert result["sites"][0]["geo_id"] == "5"
 
 
-def test_heat_frequency_validates_and_summarises(monkeypatch):
+def test_heat_frequency_validates_input():
     assert history.heat_frequency(10)["status"] == "error"
     assert history.heat_frequency("hot")["status"] == "error"
-    rows = [{"year": 2019, "days": 10}, {"year": 2025, "days": 25}]
+
+
+def test_heat_frequency_reports_every_year_and_a_summary(monkeypatch):
+    rows = [{"year": y, "days": d, "last_day": datetime.date(y, 12, 31)}
+            for y, d in zip(range(2019, 2026), [34, 27, 21, 65, 65, 40, 34])]
     monkeypatch.setattr(history, "run_query", fake_runner(rows))
     result = history.heat_frequency(100)
-    assert result["status"] == "ok"
-    assert "rose" in result["trend"]
+    assert result["status"] == "ok" and len(result["days_per_year"]) == 7
+    assert result["peak_year"] in (2022, 2023) and result["peak_days"] == 65
+    assert "Peak" in result["trend"]
+
+
+def test_trend_is_not_just_first_versus_last_year():
+    # The real Dallas pattern: first 34, last 14, but peaks of 65 in between. The old logic said "fell".
+    series = [{"year": y, "days": d} for y, d in zip(range(2019, 2026), [34, 27, 21, 65, 65, 40, 14])]
+    out = history.summarize_trend(series, 100.0, datetime.date(2025, 12, 31))
+    assert out["direction"] == "no_clear_trend"
+    assert "fell" not in out["summary"] and "No clear trend" in out["summary"]
+
+
+def test_trend_detects_a_steady_rise_and_fall():
+    rising = [{"year": 2015 + i, "days": 10 + 5 * i} for i in range(8)]
+    falling = [{"year": 2015 + i, "days": 50 - 5 * i} for i in range(8)]
+    up = history.summarize_trend(rising, 100.0)
+    down = history.summarize_trend(falling, 100.0)
+    assert up["direction"] == "rising" and up["slope_days_per_year"] == 5.0
+    assert down["direction"] == "falling" and down["slope_days_per_year"] == -5.0
+
+
+def test_partial_last_year_is_left_out_of_the_trend():
+    # A summer that stops in June would look like a collapse if it were counted.
+    series = [{"year": 2018 + i, "days": 20 + 3 * i} for i in range(7)] + [{"year": 2025, "days": 2}]
+    out = history.summarize_trend(series, 100.0, datetime.date(2025, 6, 10))
+    assert out["partial_last_year"] is True
+    assert out["direction"] == "rising"
+
+
+def test_too_few_years_says_so():
+    out = history.summarize_trend([{"year": 2024, "days": 5}, {"year": 2025, "days": 9}], 100.0)
+    assert out["direction"] == "insufficient_data" and "too few" in out["summary"]
+
+
+def test_years_with_no_hot_days_are_kept_as_zero(monkeypatch):
+    rows = [{"year": 2019, "days": 0, "last_day": datetime.date(2019, 12, 31)}]
+    monkeypatch.setattr(history, "run_query", fake_runner(rows))
+    assert history.heat_frequency(120)["days_per_year"] == [{"year": 2019, "days": 0}]
 
 
 def test_community_profile_handles_no_tracts(monkeypatch):
@@ -129,3 +173,27 @@ def test_community_profile_ok(monkeypatch):
     result = community.community_profile(32.7, -96.8, 3)
     assert result["status"] == "ok"
     assert result["median_age"] == 33.5 and result["no_vehicle_rate"] is None
+
+
+def test_tracts_outside_measured_area_are_not_scored(monkeypatch):
+    rows = [
+        {"geo_id": "in", "latitude": 32.75, "longitude": -96.75, "predicted_offset_f": 2.0,
+         "no_vehicle_rate": 0.1, "median_age": 30, "top_feature_attributions": []},
+        {"geo_id": "far", "latitude": 33.04, "longitude": -97.01, "predicted_offset_f": 22.7,
+         "no_vehicle_rate": 0.1, "median_age": 30, "top_feature_attributions": []},
+    ]
+    monkeypatch.setattr(prediction, "run_query", fake_runner(rows))
+    monkeypatch.setattr(prediction, "_within_coverage", lambda lat, lon: lat < 33)
+    assert [r["geo_id"] for r in prediction.predict_all_tracts()] == ["in"]
+
+
+def test_tract_query_asks_for_more_than_the_default_row_cap(monkeypatch):
+    seen = {}
+
+    def run(sql, params=(), settings=None, max_rows=None):
+        seen["max_rows"] = max_rows
+        return []
+
+    monkeypatch.setattr(prediction, "run_query", run)
+    prediction.predict_all_tracts()
+    assert seen["max_rows"] and seen["max_rows"] > 500  # 559 tracts were silently cut to 500 before

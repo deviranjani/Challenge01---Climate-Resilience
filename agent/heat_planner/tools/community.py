@@ -28,7 +28,8 @@ def community_profile(latitude: float, longitude: float, radius_km: int = 2) -> 
     rows = run_query(
         f"""SELECT COUNT(*) AS tracts,
                    SUM(total_pop) AS people,
-                   SAFE_DIVIDE(SUM(median_age * total_pop), SUM(total_pop)) AS median_age,
+                   SAFE_DIVIDE(SUM(IF(median_age > 0, median_age * total_pop, NULL)),
+                               SUM(IF(median_age > 0, total_pop, NULL))) AS median_age,
                    SAFE_DIVIDE(SUM(poverty_rate * total_pop), SUM(total_pop)) AS poverty_rate,
                    SAFE_DIVIDE(SUM(no_vehicle_rate * total_pop), SUM(total_pop)) AS no_vehicle_rate
             FROM {table(settings, 'tract_demographics')}

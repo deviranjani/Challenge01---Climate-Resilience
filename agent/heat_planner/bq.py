@@ -34,6 +34,7 @@ def run_query(
     sql: str,
     params: Sequence[bigquery.ScalarQueryParameter] = (),
     settings: Settings | None = None,
+    max_rows: int | None = None,
 ) -> list[dict[str, Any]]:
     """Run a read-only parameterised query and return rows as dicts."""
     settings = settings or load_settings()
@@ -43,7 +44,7 @@ def run_query(
     )
     try:
         job = _client(settings.project_id, settings.location).query(sql, job_config=config)
-        rows = job.result(max_results=settings.max_rows)
+        rows = job.result(max_results=max_rows or settings.max_rows)
         result = [dict(row.items()) for row in rows]
     except Exception as exc:  # google.api_core errors vary; normalise them
         logger.exception("BigQuery query failed")

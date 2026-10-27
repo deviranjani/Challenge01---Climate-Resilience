@@ -4,40 +4,157 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Heat Planner</title>
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="dark light">
 <script>try{var t=localStorage.getItem("heat-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-<header class="band">
-  <div class="bandin">
-    <h1>Heat Planner</h1>
-    <div class="themetoggle" role="group" aria-label="Colour theme">
-      <button type="button" data-theme-choice="auto" aria-pressed="true">Auto</button>
-      <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
-      <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
-    </div>
-  </div>
-</header>
-<main class="wrap">
-  <p class="sub">Ask where heat is worst, why, how often it happens and who lives there. Predictions come from a BigQuery ML model; every figure comes from a tool, never from the language model.</p>
-  <section class="card ask">
-    <form id="askForm" autocomplete="off">
-      <label for="q" class="sr">Question</label>
-      <div class="askrow">
-        <input id="q" type="text" maxlength="1000" placeholder="e.g. Where should we send hydration trucks first?" spellcheck="false">
-        <button id="go" type="submit" class="primary">Send</button>
-        <button id="newchat" type="button">New chat</button>
+<div class="app">
+
+  <!-- ============ left: assistant ============ -->
+  <aside class="sidebar" id="sidebar" aria-label="Assistant">
+    <header class="side-head">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#22D3EE"/></linearGradient></defs><rect width="32" height="32" rx="9" fill="url(#lg)"/><path d="M16 6c3 4 6 6.5 6 11a6 6 0 0 1-12 0c0-2 1-3.6 2-4.6.4 1.6 1.2 2.4 2 2.6C14 12 14.6 9 16 6z" fill="#fff" opacity=".95"/></svg>
       </div>
-    </form>
-  </section>
-  <section>
-    <div class="sugg-label" id="suggLabel">Suggested questions</div>
-    <div class="chips" id="suggest"></div>
-  </section>
-  <div id="out" class="thread" aria-live="polite"></div>
-  <footer class="foot">Offsets describe one afternoon's spatial pattern (NOAA Heat Watch), not a forecast, and are less certain away from the roads that were measured. The assistant can make mistakes: check key figures against the cards.</footer>
-</main>
-<script src="/static/app.js"></script>
+      <div class="titles"><div class="brand">Heat Planner</div><div class="tagline" id="cityLine">Heat response command center</div></div>
+      <button type="button" class="icon-btn" id="themeBtn" aria-label="Switch colour theme" title="Switch colour theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </header>
+    <div class="badges">
+      <span class="badge" id="modelBadge" title="Reasoning model">Gemini</span>
+      <span class="badge" id="voiceBadge" title="Speech to text">Live voice</span>
+      <span class="badge ghost">BigQuery ML</span>
+    </div>
+
+    <div class="thread" id="out" aria-live="polite">
+      <div class="welcome" id="welcome">
+        <div class="hello">Ask about heat in Dallas</div>
+        <p>Where it is hottest, why, how often it happens and who lives there. Speak or type, and the workspace follows the conversation.</p>
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="chips" id="suggest"></div>
+      <form id="askForm" autocomplete="off">
+        <label for="q" class="sr">Question</label>
+        <textarea id="q" rows="1" maxlength="1000" placeholder="Ask, or press the microphone…" spellcheck="false"></textarea>
+        <button type="button" id="mic" class="mic" aria-label="Speak your question" aria-pressed="false" title="Speak your question (Gemini Live)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        </button>
+        <button type="submit" id="go" class="send" aria-label="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </form>
+      <div class="voice-note" id="voiceNote" hidden></div>
+      <button type="button" class="link" id="newchat">New conversation</button>
+    </div>
+  </aside>
+
+  <!-- ============ right: workspace ============ -->
+  <main class="workspace" id="workspace">
+    <header class="topbar">
+      <div>
+        <h1 id="pageTitle">Dallas heat command center</h1>
+        <div class="sub" id="statusLine">Loading data…</div>
+      </div>
+      <div class="topactions">
+        <span class="pill" id="fcPill">Forecast: loading</span>
+        <button type="button" class="ghost-btn" id="resetLayout" hidden>Exit full screen</button>
+      </div>
+    </header>
+
+    <section class="kpis" id="kpis" aria-label="Trackers">
+      <div class="kpi" id="kpi-forecast"><div class="k-label">Forecast high</div><div class="k-value">–</div><div class="k-sub">&nbsp;</div></div>
+      <div class="kpi" id="kpi-peak"><div class="k-label">Peak expected temperature</div><div class="k-value">–</div><div class="k-sub">&nbsp;</div></div>
+      <div class="kpi" id="kpi-people"><div class="k-label">People in hotter tracts</div><div class="k-value">–</div><div class="k-sub">&nbsp;</div></div>
+      <div class="kpi" id="kpi-top"><div class="k-label">Top priority tract</div><div class="k-value">–</div><div class="k-sub">&nbsp;</div></div>
+      <div class="kpi" id="kpi-days"><div class="k-label">Days at 100°F, last full year</div><div class="k-value">–</div><div class="k-sub">&nbsp;</div></div>
+    </section>
+
+    <section class="panes" id="panes">
+      <article class="pane" id="pane-map" data-pane="map">
+        <header class="pane-head"><h2>Live map</h2>
+          <div class="seg" id="baseSeg" role="group" aria-label="Map type">
+            <button type="button" data-base="roadmap" aria-pressed="true">Map</button>
+            <button type="button" data-base="satellite" aria-pressed="false">Satellite</button>
+            <button type="button" data-base="hybrid" aria-pressed="false">Aerial</button>
+            <button type="button" data-base="3d" aria-pressed="false">3D</button>
+          </div>
+          <button type="button" class="icon-btn small" data-max aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        </header>
+        <div class="pane-body map-body">
+          <div id="map" class="fill"></div>
+          <div id="map3d" class="fill" hidden></div>
+          <div class="layerbar" id="layerBar">
+            <label class="chip-toggle"><input type="checkbox" data-layer="heat" checked><span>Heat surface</span></label>
+            <label class="chip-toggle"><input type="checkbox" data-layer="tracts" checked><span>Tract forecast</span></label>
+            <label class="chip-toggle"><input type="checkbox" data-layer="dots"><span>Readings</span></label>
+            <label class="chip-toggle"><input type="checkbox" data-layer="traffic"><span>Live traffic</span></label>
+          </div>
+          <div class="legend" id="mapLegend"><span>cooler</span><i class="grad"></i><span>hotter than average</span></div>
+          <div class="placecard" id="placeCard" hidden></div>
+          <div class="overlay-msg" id="mapMsg" hidden></div>
+        </div>
+      </article>
+
+      <article class="pane" id="pane-forecast" data-pane="forecast">
+        <header class="pane-head"><h2>Forecast &amp; scenario</h2>
+          <button type="button" class="icon-btn small" data-max aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        </header>
+        <div class="pane-body scroll" id="forecastBody"><div class="mute pad">Loading forecast…</div></div>
+      </article>
+
+      <article class="pane" id="pane-history" data-pane="history">
+        <header class="pane-head"><h2>Heat days tracker</h2>
+          <div class="seg" id="thrSeg" role="group" aria-label="Threshold">
+            <button type="button" data-thr="95" aria-pressed="false">95°</button>
+            <button type="button" data-thr="100" aria-pressed="true">100°</button>
+            <button type="button" data-thr="105" aria-pressed="false">105°</button>
+            <button type="button" data-thr="110" aria-pressed="false">110°</button>
+          </div>
+          <button type="button" class="icon-btn small" data-max aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        </header>
+        <div class="pane-body scroll" id="historyBody"><div class="mute pad">Loading history…</div></div>
+      </article>
+
+      <article class="pane" id="pane-priority" data-pane="priority">
+        <header class="pane-head"><h2>Response tracker</h2>
+          <button type="button" class="icon-btn small" data-max aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        </header>
+        <div class="pane-body scroll" id="priorityBody"><div class="mute pad">Ranking tracts…</div></div>
+      </article>
+
+      <article class="pane" id="pane-graph" data-pane="graph">
+        <header class="pane-head"><h2>Tract graph</h2>
+          <label class="range" title="Hottest tracts shown"><span id="graphLimitVal">60</span><input id="graphLimit" type="range" min="20" max="200" step="10" value="60" aria-label="Tracts shown"></label>
+          <button type="button" class="icon-btn small" data-max aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        </header>
+        <div class="pane-body">
+          <div id="graph" class="fill"></div>
+          <div class="glegend" id="graphLegend"></div>
+          <div class="overlay-msg" id="graphMsg" hidden></div>
+        </div>
+      </article>
+    </section>
+
+    <footer class="foot">Offsets describe one afternoon's spatial pattern (NOAA Heat Watch), not a forecast: the forecast comes from the National Weather Service, and expected temperature is forecast high plus the predicted offset. Predictions are less certain away from the roads that were measured, and tracts outside that area are not shown. The assistant can make mistakes: check key figures against the panes.</footer>
+  </main>
+</div>
+
+<script src="/static/common.js"></script>
+<script src="/static/voice.js"></script>
+<script src="/static/chat.js"></script>
+<script src="/static/kpis.js"></script>
+<script src="/static/map.js"></script>
+<script src="/static/forecast.js"></script>
+<script src="/static/history.js"></script>
+<script src="/static/priority.js"></script>
+<script src="/static/graph.js"></script>
+<script src="/static/workspace.js"></script>
 </body>
 </html>
