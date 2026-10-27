@@ -11,6 +11,12 @@ AGENT_MAX_STEPS = int(os.environ.get("HEAT_AGENT_MAX_STEPS", "12"))
 AGENT_HISTORY_TURNS = 12
 MAX_QUESTION_CHARS = 1000
 
+# Operational guardrails across the three climate-resilience tracks (City of Dallas defaults).
+MAX_HYDRATION_TRUCKS = int(os.environ.get("HEAT_MAX_HYDRATION_TRUCKS", "20"))
+MAX_WELLNESS_UNITS = int(os.environ.get("HEAT_MAX_WELLNESS_UNITS", "10"))
+MAX_COOLING_CENTERS = int(os.environ.get("HEAT_MAX_COOLING_CENTERS", "3"))
+MAX_CANOPY_ZONES = int(os.environ.get("HEAT_MAX_CANOPY_ZONES", "10"))
+
 
 @dataclass(frozen=True)
 class Settings:
