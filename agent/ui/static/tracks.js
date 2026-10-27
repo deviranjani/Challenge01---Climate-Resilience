@@ -3,7 +3,6 @@
   "use strict";
   const { h, $, getJson, state, bus } = HP;
 
-  const NAMES = { today: "Today", budget: "Budget cycle", trees: "This decade" };
   const ICON = {
     today: '<path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/><circle cx="12" cy="12" r="4"/>',
     budget: '<path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/>',

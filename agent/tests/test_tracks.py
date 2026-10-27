@@ -87,3 +87,7 @@ def test_customer_facing_text_never_names_the_technology():
     for word in ("bigquery", "gemini", "argon", "offset_model", "llm", "vertex"):
         assert word not in shown, word
     assert "never mention the technology" in prompts.ROOT.lower()
+
+
+def test_track_names_say_what_the_track_does():
+    assert [tracks.TRACKS[k]["title"] for k in ("today", "budget", "trees")] == ["Respond Today", "Fund Cooling Centers", "Grow the Canopy"]

@@ -36,9 +36,9 @@ what the analysis cannot do. Only the panes that belong to the chosen track are 
 
 | Track | Decision | What we compute (all from BigQuery) | Shown |
 |---|---|---|---|
-| **Today** (emergency response) | Where hydration trucks, wellness checks and extended library hours go first | Areas ranked by predicted heat plus who is least able to cope, with a reason per stop | Map, dispatch list, tomorrow's heat (NWS forecast, a complement), equity audit |
-| **Budget cycle** (cooling centers) | Where permanent cooling centers go | Sites that cover the most heat-exposed, vulnerable people within walking distance without double counting; how often the city reaches 100 F | Map with walking radii, centers, heat-days tracker, equity audit, draft council proposal |
-| **This decade** (tree planting) | Where planting or cool pavement should start | Areas ranked by people x excess heat x poverty; what drives each area's heat | Map, planting priorities, tract graph, equity audit |
+| **Respond Today** (emergency response) | Where hydration trucks, wellness checks and extended library hours go first | Areas ranked by predicted heat plus who is least able to cope, with a reason per stop | Map, dispatch list, tomorrow's heat (NWS forecast, a complement), equity audit |
+| **Fund Cooling Centers** (this budget cycle) | Where permanent cooling centers go | Sites that cover the most heat-exposed, vulnerable people within walking distance without double counting; how often the city reaches 100 F | Map with walking radii, centers, heat-days tracker, equity audit, draft council proposal |
+| **Grow the Canopy** (this decade, tree planting) | Where planting or cool pavement should start | Areas ranked by people x excess heat x poverty; what drives each area's heat | Map, planting priorities, tract graph, equity audit |
 
 The logic is in `heat_planner/tracks.py` as pure functions, so every number traces to a formula. Costs, land use, tree canopy and
 pavement are not in the data, and the app says so instead of estimating them.
@@ -59,9 +59,9 @@ and never stored; the server authenticates with its own service account, so ther
 | Map | Google Maps (map, satellite, aerial, 3D), heat surface, predicted offset per area, the track's decision, walking radii | `/api/map/points`, `/api/map/tracts` |
 | Decision list | Ranked areas with the reason for each, controls, "Draft proposal" | `/api/today`, `/api/budget`, `/api/trees`, `/api/proposal` |
 | Who this reaches | Equity audit of the chosen areas against the city (race is never an input) | in each decision |
-| Tomorrow's heat (Today) | NWS 7-day forecast and a scenario high; expected temperature = scenario + predicted offset | `/api/forecast` |
-| Heat-days tracker (Budget) | Days a year at 95/100/105 F and the trend | `/api/history` |
-| Tract graph (This decade) | Neo4j-style graph of areas linked to heat, poverty, car-access and age groups | `/api/graph` |
+| Tomorrow's heat (Respond Today) | NWS 7-day forecast and a scenario high; expected temperature = scenario + predicted offset | `/api/forecast` |
+| Heat-days tracker (Fund Cooling Centers) | Days a year at 95/100/105 F and the trend | `/api/history` |
+| Tract graph (Grow the Canopy) | Neo4j-style graph of areas linked to heat, poverty, car-access and age groups | `/api/graph` |
 
 ## Customer-facing: nothing about the stack is shown
 

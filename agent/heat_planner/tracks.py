@@ -11,7 +11,7 @@ from .areas import haversine_km
 
 TRACKS: dict[str, dict[str, Any]] = {
     "today": {
-        "id": "today", "title": "Today", "subtitle": "Emergency response", "who": "City emergency management",
+        "id": "today", "title": "Respond Today", "subtitle": "Hydration trucks and wellness checks", "who": "City emergency management",
         "question": "It is 102°F tomorrow. Where do hydration trucks, wellness checks and extended library hours go first?",
         "problem": "Heat is most dangerous for people who cannot leave it: older residents, households without a car, people in the "
                    "hottest blocks. Dispatch has a few trucks and a few hours, so the question is which areas, in what order, and why.",
@@ -24,7 +24,7 @@ TRACKS: dict[str, dict[str, Any]] = {
                       "It cannot see who lives alone or has no air conditioning; age and car access are stand-ins."],
     },
     "budget": {
-        "id": "budget", "title": "This budget cycle", "subtitle": "Cooling centers", "who": "City planning, answerable to a council",
+        "id": "budget", "title": "Fund Cooling Centers", "subtitle": "Where this budget cycle's money goes", "who": "City planning, answerable to a council",
         "question": "We can fund three permanent cooling centers. Where should they go?",
         "problem": "A permanent building has to serve many heat-exposed residents, often, and without two centers competing for the same "
                    "neighbourhood. It also has to survive a council meeting: why here, who does it reach, and how often does it matter.",
@@ -37,7 +37,7 @@ TRACKS: dict[str, dict[str, Any]] = {
                       "Coverage is straight-line distance, not walking routes."],
     },
     "trees": {
-        "id": "trees", "title": "This decade", "subtitle": "Tree planting", "who": "Sustainability and urban forestry",
+        "id": "trees", "title": "Grow the Canopy", "subtitle": "Tree planting for the next decade", "who": "Sustainability and urban forestry",
         "question": "Where would tree planting or cool pavement give the most relief?",
         "problem": "Planting is slow and permanent, so it should start where excess heat, many residents and past under-investment overlap, "
                    "and the plan should be checked against whether it repeats or repairs that history.",

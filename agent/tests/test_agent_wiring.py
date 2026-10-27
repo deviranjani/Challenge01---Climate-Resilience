@@ -25,8 +25,9 @@ def test_each_track_has_its_own_specialist_and_tool():
 def test_the_selected_track_is_in_the_root_instruction():
     from heat_planner import prompts
 
-    assert "BUDGET CYCLE track" in prompts.root("Dallas", "budget").replace("budget cycle", "BUDGET CYCLE")
-    assert "THIS DECADE track" in prompts.root("Dallas", "trees")
+    assert "FUND COOLING CENTERS track" in prompts.root("Dallas", "budget")
+    assert "GROW THE CANOPY track" in prompts.root("Dallas", "trees")
+    assert "RESPOND TODAY track" in prompts.root("Dallas", "today")
     assert "working on the" not in prompts.root("Dallas", None)
     assert "latitude and longitude" in prompts.ROOT  # tells the model never to ask for them
 
