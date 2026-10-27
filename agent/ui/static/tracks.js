@@ -51,6 +51,9 @@
     const data = await getJson("/api/tracks");
     state.tracks = Object.fromEntries(data.tracks.map((t) => [t.id, t]));
     state.focus = data.focus;
+    // The scripts after this one register their listeners as they load. Announce the track only once all of them have run,
+    // or a fast response can fire the event before anyone is listening and the page never loads its data.
+    if (document.readyState === "loading") await new Promise((resolve) => document.addEventListener("DOMContentLoaded", resolve, { once: true }));
     let start = location.hash.replace("#", "");
     if (!state.tracks[start]) { try { start = localStorage.getItem("heat-track"); } catch (_) { start = null; } }
     bus.emit("tracks-ready", state.tracks);

@@ -317,3 +317,77 @@ body[data-track="trees"] #pane-graph{grid-column:6/span 7;height:420px}
 .n-item{display:inline-flex;gap:8px;align-items:flex-start;max-width:640px}
 .n-item svg{width:16px;height:16px;flex:none;margin-top:2px;color:var(--cyan)}
 .n-item b{color:var(--ink);font-weight:600}
+
+
+/* ---- v4: fleet plan, coverage chart, compact equity */
+body[data-track="today"] #pane-forecast{grid-column:1/span 5}
+body[data-track="today"] #pane-fleet{grid-column:6/span 4;height:auto;min-height:340px}
+body[data-track="today"] #pane-equity{grid-column:10/span 3;height:auto;min-height:340px}
+body[data-track="budget"] #pane-history{grid-column:1/span 4;height:380px}
+body[data-track="budget"] #pane-coverage{grid-column:5/span 5;height:380px}
+body[data-track="budget"] #pane-equity{grid-column:10/span 3;height:380px}
+body[data-track="trees"] #pane-equity{grid-column:1/span 4;height:420px}
+body[data-track="trees"] #pane-graph{grid-column:5/span 8;height:420px}
+@media (max-width:1280px){
+  body[data-track="today"] #pane-forecast,body[data-track="today"] #pane-fleet,body[data-track="today"] #pane-equity,
+  body[data-track="budget"] #pane-history,body[data-track="budget"] #pane-coverage,body[data-track="budget"] #pane-equity,
+  body[data-track="trees"] #pane-equity,body[data-track="trees"] #pane-graph{grid-column:1/-1}
+  body[data-track="budget"] #pane-history,body[data-track="trees"] #pane-equity,body[data-track="trees"] #pane-graph{height:auto;min-height:380px}
+}
+
+.fleet-controls{padding:12px 14px 4px}
+.fleet-n{font-size:15px;color:var(--mute);display:flex;align-items:baseline;gap:4px}.fleet-n b{font-size:34px;color:var(--ink);letter-spacing:-.02em;line-height:1}.fleet-n small{font-size:12px}
+.fleet-controls input[type=range]{width:100%;accent-color:var(--cyan);margin:8px 0 2px}
+.fleet-summary{padding:2px 14px 8px;font-size:12.5px;color:var(--mute)}.fleet-summary b{color:var(--ink)}
+.fleet-list{border-top:1px solid var(--line)}
+.frow{display:grid;grid-template-columns:26px 1fr auto;gap:10px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.frow:hover{background:var(--panel2)}
+.frow .n{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;font-weight:700;font-size:11.5px;color:#fff;background:var(--brand)}
+.frow .t{font-weight:600;font-size:13px}.frow .m{font-size:11.5px;color:var(--mute)}
+.frow .bar{height:5px;border-radius:3px;background:var(--raise);margin:4px 0 3px;overflow:hidden}.frow .bar i{display:block;height:100%;background:var(--brand);border-radius:3px;transition:width .25s}
+.fcount{font-weight:700;font-size:18px;color:var(--cyan);min-width:38px;text-align:right}
+
+.coverage{padding:12px 14px}
+.cov-sub{font-size:12.5px;color:var(--mute);margin-bottom:8px}.cov-sub b{color:var(--ink);font-size:15px}
+.cols{display:flex;gap:8px;align-items:flex-end;height:210px}
+.ccol{flex:1;height:100%;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:0;padding:0;cursor:pointer}
+.ccol .cbar{flex:1;width:100%;display:flex;align-items:flex-end;background:var(--raise);border-radius:8px 8px 4px 4px;overflow:hidden}
+.ccol .cbar i{display:block;width:100%;background:linear-gradient(180deg,#8b92ff,#5b6bff);opacity:.55;border-radius:6px 6px 0 0;transition:height .3s}
+.ccol.on .cbar i{background:var(--brand);opacity:1}.ccol:hover .cbar i{opacity:.85}
+.ccol .cval{font-size:11.5px;font-weight:600}.ccol .cadd{font-size:10.5px;color:var(--mute)}.ccol .cn{font-size:12px;font-weight:700;color:var(--mute)}.ccol.on .cn{color:var(--cyan)}
+.cov-note{margin-top:10px;font-size:12px;color:var(--mute);padding:8px 10px;border-radius:10px;background:var(--raise)}
+
+.equity.compact{padding:10px 12px}
+.equity.compact .eq-summary{font-size:12.5px;font-weight:600;padding:8px 10px;margin-bottom:10px;line-height:1.35}
+.eqrow{display:grid;grid-template-columns:1fr auto;gap:2px 10px;margin-bottom:10px}
+.eql{font-size:12px;color:var(--mute);grid-column:1/-1}
+.eqbar{position:relative;height:10px;border-radius:6px;background:var(--raise)}
+.eqbar .fill,.eq-legend .fill{position:absolute;left:0;top:0;bottom:0;border-radius:6px;background:var(--faint)}
+.fill.above{background:linear-gradient(90deg,#fb7185,#f43f5e)}.fill.below{background:linear-gradient(90deg,#7dd3fc,#38bdf8)}.fill.about{background:var(--faint)}
+.eqbar .tick{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);border-radius:1px;transform:translateX(-1px)}
+.eqv{font-size:12.5px;white-space:nowrap;text-align:right}.eqv b{font-size:14px}.eqv span{color:var(--mute)}
+.eq-legend{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mute);flex-wrap:wrap}
+.eq-legend .fill{position:static;display:inline-block;width:14px;height:8px}.eq-legend .tick.sample{display:inline-block;width:2px;height:12px;background:var(--ink);margin-left:6px}
+
+
+/* Panels sit in rows by their columns, whatever order they come in the page: no staggering. */
+.panes{grid-auto-flow:row dense;align-items:stretch}
+body[data-track="budget"] #pane-history,body[data-track="budget"] #pane-coverage,body[data-track="budget"] #pane-equity{grid-row:2;height:400px}
+body[data-track="today"] #pane-forecast,body[data-track="today"] #pane-fleet,body[data-track="today"] #pane-equity{grid-row:2}
+body[data-track="trees"] #pane-equity,body[data-track="trees"] #pane-graph{grid-row:2}
+@media (max-width:1280px){
+  body[data-track="budget"] #pane-history,body[data-track="budget"] #pane-coverage,body[data-track="budget"] #pane-equity,
+  body[data-track="today"] #pane-forecast,body[data-track="today"] #pane-fleet,body[data-track="today"] #pane-equity,
+  body[data-track="trees"] #pane-equity,body[data-track="trees"] #pane-graph{grid-row:auto}
+  body[data-track="budget"] #pane-coverage,body[data-track="budget"] #pane-equity{height:auto;min-height:380px}
+}
+
+/* Respond Today: a fixed row height, so ten fleet rows scroll inside their panel instead of stretching the forecast and equity panels */
+body[data-track="today"] #pane-forecast,body[data-track="today"] #pane-fleet,body[data-track="today"] #pane-equity{height:560px;min-height:0}
+@media (max-width:1280px){body[data-track="today"] #pane-forecast,body[data-track="today"] #pane-fleet,body[data-track="today"] #pane-equity{height:auto;min-height:340px}}
+
+.ctl.fixed b{font-size:20px;color:var(--ink);letter-spacing:-.01em;line-height:1.2}
+.cols.three{max-width:520px;margin:0 auto}.cols.three .ccol{cursor:default}
+/* Respond Today: a fixed row height, so ten fleet rows scroll inside their panel instead of stretching the forecast and equity panels */
+body[data-track="today"] #pane-forecast,body[data-track="today"] #pane-fleet,body[data-track="today"] #pane-equity{height:560px;min-height:0}
+@media (max-width:1280px){body[data-track="today"] #pane-forecast,body[data-track="today"] #pane-fleet,body[data-track="today"] #pane-equity{height:auto;min-height:340px}}

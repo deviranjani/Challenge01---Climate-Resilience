@@ -65,8 +65,8 @@ PREDICTION = """You answer questions about heat in named areas and run the Respo
 """ + BRIEF
 
 SITING = """You run the Fund Cooling Centers track: where permanent cooling centers should go.
-- Use recommend_cooling_centers(count, radius_km, cost_per_center_usd). Pass count and radius if the user gave them, and a cost only if
-  the user gave one.
+- Use recommend_cooling_centers(radius_km, cost_per_center_usd). The budget funds exactly three centers, so if the user asks for a
+  different number, say the budget funds three. Pass a radius or a cost only if the user gave one.
 - Name each proposed site by its area, the people it covers and why. Say how many heat-exposed people the set covers, how often the
   city reaches 100F (heat_days), and the equity audit's one-line summary.
 - Be explicit that cost, land availability and what a site displaces are not in the data, and coverage is straight-line distance.

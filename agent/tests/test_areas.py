@@ -109,3 +109,13 @@ def test_when_google_maps_is_down_the_answer_is_a_helpful_not_found_not_an_error
     assert out["status"] == "not_found" and "could not look up" in out["message"] and "ZIP code" in out["message"]
     assert "Oak Cliff" in out["suggestions"]
     assert areas.resolve_area("75215", TRACTS)["status"] == "ok"  # ZIP codes never need Google
+
+
+def test_repeated_area_labels_are_made_unique_so_no_two_rows_look_the_same():
+    from heat_planner import tracts
+
+    rows = [{"geo_id": "48113001100", "area": "Turtle Creek · 75219"}, {"geo_id": "48113002200", "area": "Turtle Creek · 75219"}, {"geo_id": "48113003300", "area": "Oak Cliff · 75211"}]
+    out = tracts.disambiguate(rows)
+    assert out[0]["area"] == "Turtle Creek · 75219 (tract 1100)" and out[1]["area"] == "Turtle Creek · 75219 (tract 2200)"
+    assert out[2]["area"] == "Oak Cliff · 75211"  # unique labels are left alone
+    assert len({r["area"] for r in out}) == 3

@@ -3,13 +3,13 @@
 (function () {
   "use strict";
   const { h, $, fmt, signed, pct, getJson, state, bus } = HP;
-  const params = { today: { focus: "hydration", limit: 10 }, budget: { count: 3, radius_km: 1.5, cost: "" }, trees: { limit: 8 } };
+  const params = { today: { focus: "hydration", limit: 10 }, budget: { radius_km: 1.5, cost: "" }, trees: { limit: 8 } };
   const TITLES = { today: "Dispatch list", budget: "Proposed cooling centers", trees: "Planting priorities" };
   const DRAFT = { today: "Draft dispatch brief", budget: "Draft council proposal", trees: "Draft planting brief" };
   const cache = {};
 
   const url = (t) => t === "today" ? `/api/today?focus=${params.today.focus}&limit=${params.today.limit}`
-    : t === "budget" ? `/api/budget?count=${params.budget.count}&radius_km=${params.budget.radius_km}${params.budget.cost !== "" ? `&cost_per_center=${params.budget.cost}` : ""}`
+    : t === "budget" ? `/api/budget?radius_km=${params.budget.radius_km}${params.budget.cost !== "" ? `&cost_per_center=${params.budget.cost}` : ""}`
     : `/api/trees?limit=${params.trees.limit}`;
 
   const items = (r) => r.sites || r.centers || [];
@@ -32,7 +32,7 @@
       box.replaceChildren(h("div", { class: "seg" }, Object.entries(state.focus || {}).map(([k, label]) => h("button", { type: "button", "aria-pressed": String(params.today.focus === k), onclick: () => { params.today.focus = k; load(); } }, label))));
     } else if (t === "budget") {
       box.replaceChildren(
-        select("Centers", params.budget.count, [1, 2, 3, 4, 5, 6].map((n) => [n, n]), (v) => { params.budget.count = Number(v); load(); }),
+        h("div", { class: "ctl fixed" }, h("span", {}, "Centers funded"), h("b", {}, "3")),
         select("Walking radius", params.budget.radius_km, [[1, "1 km"], [1.5, "1.5 km"], [2, "2 km"], [3, "3 km"]], (v) => { params.budget.radius_km = Number(v); load(); }),
         h("label", { class: "ctl" }, h("span", {}, "Cost per center (optional)"), h("input", { type: "number", min: "0", step: "50000", placeholder: "USD", value: params.budget.cost, onchange: (e) => { params.budget.cost = e.target.value; load(); } })));
     } else {
@@ -72,16 +72,38 @@
     $("#kpis").replaceChildren(...tiles);
   }
 
-  // ---------------------------------------------------------------- equity audit
+  // ---------------------------------------------------------------- equity audit (compact)
   function equity(r) {
     const body = $("#equityBody");
     if (!r) return body.replaceChildren(h("div", { class: "mute pad" }, "Waiting for the decision…"));
-    const a = r.audit, fmtv = (row, v) => (v === null ? "n/a" : row.percent ? pct(v) : fmt(v, 1));
-    const rows = a.rows.map((x) => h("tr", {}, h("td", {}, x.measure), h("td", { class: "n" }, fmtv(x, x.chosen)), h("td", { class: "n" }, fmtv(x, x.city)), h("td", {}, h("span", { class: "verdict " + x.verdict.split(" ")[0] }, x.verdict))));
-    body.replaceChildren(h("div", { class: "equity" },
+    const a = r.audit, fmtv = (row, v) => (v === null ? "n/a" : row.percent ? pct(v) : fmt(v, 0));
+    const rows = a.rows.map((x) => {
+      const top = Math.max(x.chosen || 0, x.city || 0, 0.0001) * 1.25, kind = x.verdict.split(" ")[0];
+      return h("div", { class: "eqrow", title: `${x.measure}: ${fmtv(x, x.chosen)} in these areas, ${fmtv(x, x.city)} for the city (${x.verdict})` },
+        h("div", { class: "eql" }, x.measure.replace("Households without a car", "No car in household")),
+        h("div", { class: "eqbar" }, h("i", { class: "fill " + kind, style: `width:${((x.chosen || 0) / top) * 100}%` }), h("i", { class: "tick", style: `left:${((x.city || 0) / top) * 100}%` })),
+        h("div", { class: "eqv" }, h("b", {}, fmtv(x, x.chosen)), h("span", {}, ` vs ${fmtv(x, x.city)}`)));
+    });
+    body.replaceChildren(h("div", { class: "equity compact" },
       h("div", { class: "eq-summary" }, a.summary),
-      h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Measure"), h("th", { class: "n" }, "These areas"), h("th", { class: "n" }, "City"), h("th", {}, ""))), h("tbody", {}, rows)),
-      h("div", { class: "mute eq-note" }, `Compared with all ${a.city_tracts} measured-area tracts, weighted by population. ${a.note}`)));
+      ...rows,
+      h("div", { class: "eq-legend" }, h("i", { class: "fill above" }), "these areas", h("i", { class: "tick sample" }), "city average", h("span", { title: a.note }, "· race is never used")),
+      h("div", { class: "eq-legend", style: "margin-top:2px" }, `Compared with all ${a.city_tracts} measured tracts, weighted by population.`)));
+  }
+
+  // ---------------------------------------------------------------- coverage built up by the three centers (Fund Cooling Centers)
+  function coverage(r) {
+    const body = $("#coverageBody"), curve = (r.curve || []).slice(0, 3);
+    if (!curve.length) return body.replaceChildren(h("div", { class: "mute pad" }, "No coverage data."));
+    const max = Math.max(...curve.map((c) => c.people_covered), 1), k = (n) => (n >= 1000 ? `${fmt(n / 1000, n >= 100000 ? 0 : 1)}k` : fmt(n, 0));
+    const last = curve[curve.length - 1];
+    const cols = curve.map((c) => h("div", { class: "ccol" + (c.count === curve.length ? " on" : ""), title: `${c.count === 1 ? "The first center" : `The first ${c.count} centers`}: ${fmt(c.people_covered, 0)} people (+${fmt(c.added, 0)} from this center)` },
+      h("div", { class: "cval" }, k(c.people_covered)), h("div", { class: "cbar" }, h("i", { style: `height:${(c.people_covered / max) * 100}%` })),
+      h("div", { class: "cadd" }, c.count === 1 ? "center 1" : "+" + k(c.added)), h("div", { class: "cn" }, c.count === 1 ? "1 center" : `${c.count} centers`)));
+    body.replaceChildren(h("div", { class: "coverage" },
+      h("div", { class: "cov-sub" }, h("b", {}, fmt(last.people_covered, 0)), ` people covered by the ${curve.length} centers, each within ${r.radius_km} km. Every center covers people the others do not.`),
+      h("div", { class: "cols three" }, cols),
+      h("div", { class: "cov-note" }, `Together they reach ${pct(r.share_of_need_covered)} of the heat-exposed need and ${fmt(r.heat_exposed_covered, 0)} of the ${fmt(r.heat_exposed_people, 0)} people in the hottest areas.`)));
   }
 
   // ---------------------------------------------------------------- list
@@ -90,6 +112,7 @@
     $("#draftBtn").textContent = DRAFT[t];
     $("#listMethod").textContent = r.method.length > 110 ? r.method.slice(0, 108) + "…" : r.method;
     $("#listMethod").title = r.method;
+    if (t === "budget") coverage(r);
     $("#listBody").replaceChildren(...[
       t === "trees" ? h("div", { class: "note-inline" }, "Intervention is undetermined: no canopy or pavement data is loaded, so this ranks where to start, not what to build.") : null,
       t === "budget" && r.heat_days ? h("div", { class: "note-inline ok" }, `Station history: the city reaches 100°F on ${fmt(r.heat_days.average_days_per_year, 0)} days a year on average (peak ${r.heat_days.peak_days} in ${r.heat_days.peak_year}).`) : null,
@@ -124,7 +147,7 @@
     body.replaceChildren(h("div", { class: "thinking" }, h("i"), h("i"), h("i"), h("span", { class: "secs" }, "Drafting from the figures…")));
     modal.hidden = false;
     const p = params[t];
-    const payload = t === "today" ? { track: t, focus: p.focus, limit: p.limit } : t === "budget" ? { track: t, count: p.count, radius_km: p.radius_km, cost_per_center: p.cost === "" ? null : Number(p.cost) } : { track: t, limit: p.limit };
+    const payload = t === "today" ? { track: t, focus: p.focus, limit: p.limit } : t === "budget" ? { track: t, radius_km: p.radius_km, cost_per_center: p.cost === "" ? null : Number(p.cost) } : { track: t, limit: p.limit };
     try {
       const res = await fetch("/api/proposal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json();
@@ -148,7 +171,7 @@
     bus.on("decision-request", ({ track, args }) => {
       const p = params[track];
       if (track === "today") { if (args.focus && state.focus[args.focus]) p.focus = args.focus; if (args.top_n) p.limit = Math.max(1, Math.min(25, args.top_n)); }
-      if (track === "budget") { if (args.count) p.count = Math.max(1, Math.min(6, args.count)); if (args.radius_km) p.radius_km = args.radius_km; p.cost = args.cost_per_center_usd == null ? "" : args.cost_per_center_usd; }
+      if (track === "budget") { if (args.radius_km) p.radius_km = args.radius_km; p.cost = args.cost_per_center_usd == null ? "" : args.cost_per_center_usd; }
       if (track === "trees" && args.top_n) p.limit = Math.max(1, Math.min(15, args.top_n));
       delete cache[track];
       if (state.track !== track) HP.setTrack(track); else load();
