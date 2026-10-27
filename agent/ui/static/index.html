@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Heat Planner</title>
+<meta name="color-scheme" content="light dark">
+<script>try{var t=localStorage.getItem("heat-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="band">
+  <div class="bandin">
+    <h1>Heat Planner</h1>
+    <div class="themetoggle" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-choice="auto" aria-pressed="true">Auto</button>
+      <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+      <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
+    </div>
+  </div>
+</header>
+<main class="wrap">
+  <p class="sub">Ask where heat is worst, why, how often it happens and who lives there. Predictions come from a BigQuery ML model; every figure comes from a tool, never from the language model.</p>
+  <section class="card ask">
+    <form id="askForm" autocomplete="off">
+      <label for="q" class="sr">Question</label>
+      <div class="askrow">
+        <input id="q" type="text" maxlength="1000" placeholder="e.g. Where should we send hydration trucks first?" spellcheck="false">
+        <button id="go" type="submit" class="primary">Send</button>
+        <button id="newchat" type="button">New chat</button>
+      </div>
+    </form>
+  </section>
+  <section>
+    <div class="sugg-label" id="suggLabel">Suggested questions</div>
+    <div class="chips" id="suggest"></div>
+  </section>
+  <div id="out" class="thread" aria-live="polite"></div>
+  <footer class="foot">Offsets describe one afternoon's spatial pattern (NOAA Heat Watch), not a forecast, and are less certain away from the roads that were measured. The assistant can make mistakes: check key figures against the cards.</footer>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
