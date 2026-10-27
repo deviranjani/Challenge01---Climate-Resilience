@@ -3,14 +3,14 @@ from heat_planner import config
 
 def test_defaults_match_the_documented_models_and_locations(monkeypatch):
     for name in ("HEAT_AGENT_MODEL", "HEAT_ROUTER_MODEL", "HEAT_THINKING_LEVEL", "HEAT_LIVE_MODEL", "HEAT_LIVE_LOCATION",
-                 "NWS_USER_AGENT", "BQ_DATASET", "BQML_MODEL", "HEAT_CITY"):
+                 "NWS_USER_AGENT", "BQML_MODEL_TYPE", "BQ_DATASET", "BQML_MODEL", "HEAT_CITY"):
         monkeypatch.delenv(name, raising=False)
     s = config.load_settings()
     assert s.llm_model == "gemini-4-argon" and s.router_model == "gemini-3.8-flash"
     assert s.thinking_level == "LOW"
     assert s.live_model == "gemini-live-2.5-flash-native-audio" and s.live_location == "us-central1"
     assert s.dataset == "a4i_climate" and s.model_name == "offset_model" and s.city == "Dallas"
-    assert "HeatPlanner" in s.nws_user_agent
+    assert "HeatPlanner" in s.nws_user_agent and "LINEAR_REG" in s.bqml_type
     assert s.project_id == "test-project"  # set by the autouse fixture
 
 

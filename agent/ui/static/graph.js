@@ -19,7 +19,7 @@
 
   function legend(data) {
     const chips = Object.entries(LABEL_COLOR).map(([label, color]) => h("span", { class: "gl" }, h("i", { style: `background:${color}` }), label));
-    chips.unshift(h("span", { class: "gl" }, h("i", { class: "grad" }), `Tract · hottest ${data.tracts_shown} of ${data.tracts_total}`));
+    chips.unshift(h("span", { class: "gl" }, h("i", { class: "grad" }), `Area · hottest ${data.tracts_shown} of ${data.tracts_total}`));
     $("#graphLegend").replaceChildren(...chips);
   }
 
@@ -42,7 +42,7 @@
     g.net.on("selectNode", (p) => {
       const id = p.nodes[0], n = g.nodes.get(id);
       focus(id);
-      if (n.props.label === "Tract") bus.emit("place", { lat: n.props.lat, lon: n.props.lon, geo_id: n.props.name && n.props.id ? n.props.id : String(n.id).replace("tract:", ""), offset_f: n.props.offset_f, drivers: n.props.drivers, tract: n.props, source: "graph", fly: true });
+      if (n.props.label === "Tract") bus.emit("place", { area: n.props.name, lat: n.props.lat, lon: n.props.lon, geo_id: String(n.id).replace("tract:", ""), offset_f: n.props.offset_f, drivers: n.props.drivers, tract: n.props, source: "graph", fly: true });
     });
     g.net.on("deselectNode", clear);
     legend(data);
@@ -61,5 +61,6 @@
   $("#graphLimit").addEventListener("change", load);
   bus.on("layout", () => { if (g.net) { g.net.redraw(); g.net.fit({ animation: false }); } });
   bus.on("place", (p) => { if (g.net && p.geo_id && g.nodes.get(`tract:${p.geo_id}`) && p.source !== "graph") { g.net.selectNodes([`tract:${p.geo_id}`]); focus(`tract:${p.geo_id}`); } });
-  load();
+  let loaded = false;
+  bus.on("track", (id) => { if (id === "trees" && !loaded) { loaded = true; load(); } });
 })();

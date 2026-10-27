@@ -84,14 +84,14 @@ async def _converse(agent: Any, history: list[dict[str, str]], question: str) ->
     return final
 
 
-def run(question: str, history: Optional[list[dict[str, Any]]] = None, model: Any = None) -> dict[str, Any]:
+def run(question: str, history: Optional[list[dict[str, Any]]] = None, model: Any = None, track: Optional[str] = None) -> dict[str, Any]:
     """Answer one chat message. Synchronous on purpose: the API runs it in a worker thread."""
     question = (question or "").strip()[: config.MAX_QUESTION_CHARS]
     if not question:
         raise AgentError("Ask a question first.")
     ctx = AgentContext()
     try:
-        text = asyncio.run(_converse(build_root_agent(ctx, model), clean_history(history), question))
+        text = asyncio.run(_converse(build_root_agent(ctx, model, track), clean_history(history), question))
     except Exception as exc:
         logger.exception("agent run failed")
         if "ResourceExhausted" in type(exc).__name__ or "429" in str(exc):

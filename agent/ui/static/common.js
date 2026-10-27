@@ -37,10 +37,12 @@ window.HP = (function () {
     return data;
   }
 
-  const placeQuestion = (lat, lon) => `How much hotter than average is latitude ${Number(lat).toFixed(4)}, longitude ${Number(lon).toFixed(4)}, and why?`;
+  // People ask about areas by name. A neighbourhood name if Google gave one, otherwise the ZIP code.
+  const areaName = (p) => (p && (p.neighbourhood || (p.zip ? `ZIP ${p.zip}` : null))) || (p && p.area) || "this area";
+  const areaQuestion = (p) => `How much hotter than average is ${areaName(p)}, and why?`;
 
   // ---- state and events -------------------------------------------------------------------------------
-  const state = { tracts: [], points: [], maxAbs: 3, forecast: null, scenarioHigh: null, history: null, priority: null, selected: null };
+  const state = { track: "today", tracks: {}, tracts: [], points: [], maxAbs: 3, forecast: null, scenarioHigh: null, scenarioSource: "", history: null, decision: null, selected: null };
   const listeners = {};
   const bus = {
     on(name, fn) { (listeners[name] = listeners[name] || []).push(fn); },
@@ -48,6 +50,13 @@ window.HP = (function () {
   };
   // Expected temperature at a place = scenario (forecast) high + the model's offset for that place.
   const expected = (offset) => (state.scenarioHigh === null || offset === null || offset === undefined ? null : state.scenarioHigh + offset);
+
+  // One shared load of the per-area predictions, so the map, trackers and forecast all use the same numbers.
+  let tractsPromise = null;
+  function loadTracts() {
+    if (!tractsPromise) tractsPromise = getJson("/api/map/tracts").then((d) => { state.tracts = d.tracts; return d.tracts; }).catch((e) => { tractsPromise = null; throw e; });
+    return tractsPromise;
+  }
 
   function script(src) {
     return new Promise((resolve, reject) => {
@@ -59,5 +68,5 @@ window.HP = (function () {
 
   function setText(el, text) { el.textContent = text; }
 
-  return { h, $, $$, fmt, signed, pct, nice, offsetRgb, offsetCss, getJson, placeQuestion, state, bus, expected, script, setText, views: {}, askChat: () => {} };
+  return { h, $, $$, fmt, signed, pct, nice, offsetRgb, offsetCss, getJson, areaName, areaQuestion, state, bus, loadTracts, expected, script, setText, views: {}, askChat: () => {} };
 })();

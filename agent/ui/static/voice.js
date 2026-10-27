@@ -1,4 +1,4 @@
-/* Speech to text through the Gemini Live API.
+/* Speech to text.
    The microphone is captured as 16 kHz 16-bit mono PCM and streamed to /api/live; the server holds the Live session,
    so no credentials reach the browser. The transcript comes back as it forms and is final when speech stops. */
 HP.voice = (function () {

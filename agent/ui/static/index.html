@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Heat Planner</title>
+<title>Heat Compass · Dallas</title>
 <meta name="color-scheme" content="dark light">
 <script>try{var t=localStorage.getItem("heat-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,39 +11,41 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/styles.css">
 </head>
-<body>
+<body data-track="today">
 <div class="app">
+
+  <!-- ============ top: what powers this ============ -->
+  <header class="disclosure" id="disclosure">
+    <div class="disc-row">
+      <div class="disc-brand">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#22D3EE"/></linearGradient></defs><rect width="32" height="32" rx="9" fill="url(#lg)"/><circle cx="16" cy="16" r="9" fill="none" stroke="#fff" stroke-width="1.6" opacity=".9"/><path d="M16 7.5l3.2 8.5L16 24.5 12.8 16z" fill="#fff"/><circle cx="16" cy="16" r="1.6" fill="#7C5CFF"/></svg>
+        <div class="brand-text">
+          <div class="brand">Heat Compass</div>
+          <div class="city"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.4"/></svg><b>Dallas</b><span>Urban heat response</span></div>
+        </div>
+      </div>
+      <div class="disc-spacer"></div>
+      <button type="button" class="icon-btn" id="themeBtn" aria-label="Switch colour theme" title="Switch colour theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </div>
+  </header>
 
   <!-- ============ left: assistant ============ -->
   <aside class="sidebar" id="sidebar" aria-label="Assistant">
     <header class="side-head">
-      <div class="logo" aria-hidden="true">
-        <svg viewBox="0 0 32 32"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#22D3EE"/></linearGradient></defs><rect width="32" height="32" rx="9" fill="url(#lg)"/><path d="M16 6c3 4 6 6.5 6 11a6 6 0 0 1-12 0c0-2 1-3.6 2-4.6.4 1.6 1.2 2.4 2 2.6C14 12 14.6 9 16 6z" fill="#fff" opacity=".95"/></svg>
-      </div>
-      <div class="titles"><div class="brand">Heat Planner</div><div class="tagline" id="cityLine">Heat response command center</div></div>
-      <button type="button" class="icon-btn" id="themeBtn" aria-label="Switch colour theme" title="Switch colour theme">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-      </button>
+      <div class="titles"><div class="brand">Assistant</div><div class="tagline" id="trackLine">Today · Emergency response</div></div>
+      <button type="button" class="link" id="newchat">New conversation</button>
     </header>
-    <div class="badges">
-      <span class="badge" id="modelBadge" title="Reasoning model">Gemini</span>
-      <span class="badge" id="voiceBadge" title="Speech to text">Live voice</span>
-      <span class="badge ghost">BigQuery ML</span>
-    </div>
 
-    <div class="thread" id="out" aria-live="polite">
-      <div class="welcome" id="welcome">
-        <div class="hello">Ask about heat in Dallas</div>
-        <p>Where it is hottest, why, how often it happens and who lives there. Speak or type, and the workspace follows the conversation.</p>
-      </div>
-    </div>
+    <div class="thread" id="out" aria-live="polite"></div>
 
     <div class="composer">
       <div class="chips" id="suggest"></div>
       <form id="askForm" autocomplete="off">
         <label for="q" class="sr">Question</label>
-        <textarea id="q" rows="1" maxlength="1000" placeholder="Ask, or press the microphone…" spellcheck="false"></textarea>
-        <button type="button" id="mic" class="mic" aria-label="Speak your question" aria-pressed="false" title="Speak your question (Gemini Live)">
+        <textarea id="q" rows="1" maxlength="1000" placeholder="Ask about an area, e.g. Oak Cliff or 75215…" spellcheck="false"></textarea>
+        <button type="button" id="mic" class="mic" aria-label="Speak your question" aria-pressed="false" title="Speak your question">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
         </button>
         <button type="submit" id="go" class="send" aria-label="Send">
@@ -51,34 +53,20 @@
         </button>
       </form>
       <div class="voice-note" id="voiceNote" hidden></div>
-      <button type="button" class="link" id="newchat">New conversation</button>
     </div>
   </aside>
 
-  <!-- ============ right: workspace ============ -->
+  <!-- ============ right: the track workspace ============ -->
   <main class="workspace" id="workspace">
-    <header class="topbar">
-      <div>
-        <h1 id="pageTitle">Dallas heat command center</h1>
-        <div class="sub" id="statusLine">Loading data…</div>
-      </div>
-      <div class="topactions">
-        <span class="pill" id="fcPill">Forecast: loading</span>
-        <button type="button" class="ghost-btn" id="resetLayout" hidden>Exit full screen</button>
-      </div>
-    </header>
+    <nav class="tracks" id="trackNav" role="tablist" aria-label="Choose a track"></nav>
 
-    <section class="kpis" id="kpis" aria-label="Trackers">
-      <div class="kpi" id="kpi-forecast"><div class="k-label">Forecast high</div><div class="k-value">–</div><div class="k-sub">&nbsp;</div></div>
-      <div class="kpi" id="kpi-peak"><div class="k-label">Peak expected temperature</div><div class="k-value">–</div><div class="k-sub">&nbsp;</div></div>
-      <div class="kpi" id="kpi-people"><div class="k-label">People in hotter tracts</div><div class="k-value">–</div><div class="k-sub">&nbsp;</div></div>
-      <div class="kpi" id="kpi-top"><div class="k-label">Top priority tract</div><div class="k-value">–</div><div class="k-sub">&nbsp;</div></div>
-      <div class="kpi" id="kpi-days"><div class="k-label">Days at 100°F, last full year</div><div class="k-value">–</div><div class="k-sub">&nbsp;</div></div>
-    </section>
+    <section class="problem" id="problemCard" aria-live="polite"></section>
+
+    <section class="kpis" id="kpis" aria-label="Key numbers"></section>
 
     <section class="panes" id="panes">
-      <article class="pane" id="pane-map" data-pane="map">
-        <header class="pane-head"><h2>Live map</h2>
+      <article class="pane" id="pane-map" data-pane="map" data-tracks="today budget trees">
+        <header class="pane-head"><h2>Map</h2>
           <div class="seg" id="baseSeg" role="group" aria-label="Map type">
             <button type="button" data-base="roadmap" aria-pressed="true">Map</button>
             <button type="button" data-base="satellite" aria-pressed="false">Satellite</button>
@@ -92,9 +80,9 @@
           <div id="map3d" class="fill" hidden></div>
           <div class="layerbar" id="layerBar">
             <label class="chip-toggle"><input type="checkbox" data-layer="heat" checked><span>Heat surface</span></label>
-            <label class="chip-toggle"><input type="checkbox" data-layer="tracts" checked><span>Tract forecast</span></label>
-            <label class="chip-toggle"><input type="checkbox" data-layer="dots"><span>Readings</span></label>
-            <label class="chip-toggle"><input type="checkbox" data-layer="traffic"><span>Live traffic</span></label>
+            <label class="chip-toggle"><input type="checkbox" data-layer="tracts" checked><span>Predicted by area</span></label>
+            <label class="chip-toggle only-today"><input type="checkbox" data-layer="traffic"><span>Live traffic</span></label>
+            <label class="chip-toggle only-today"><input type="checkbox" data-layer="trucks" checked><span>Truck animation</span></label>
           </div>
           <div class="legend" id="mapLegend"><span>cooler</span><i class="grad"></i><span>hotter than average</span></div>
           <div class="placecard" id="placeCard" hidden></div>
@@ -102,36 +90,42 @@
         </div>
       </article>
 
-      <article class="pane" id="pane-forecast" data-pane="forecast">
-        <header class="pane-head"><h2>Forecast &amp; scenario</h2>
+      <article class="pane" id="pane-list" data-pane="list" data-tracks="today budget trees">
+        <header class="pane-head"><h2 id="listTitle">Decision</h2>
+          <button type="button" class="icon-btn small" data-max aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        </header>
+        <div class="controls" id="listControls"></div>
+        <div class="pane-body scroll" id="listBody"><div class="mute pad">Loading…</div></div>
+        <footer class="pane-foot"><button type="button" class="btn primary" id="draftBtn">Draft proposal</button><span class="mute" id="listMethod"></span></footer>
+      </article>
+
+      <article class="pane" id="pane-forecast" data-pane="forecast" data-tracks="today">
+        <header class="pane-head"><h2>Tomorrow's heat</h2><span class="badge live">Live forecast · National Weather Service</span>
           <button type="button" class="icon-btn small" data-max aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
         </header>
         <div class="pane-body scroll" id="forecastBody"><div class="mute pad">Loading forecast…</div></div>
       </article>
 
-      <article class="pane" id="pane-history" data-pane="history">
-        <header class="pane-head"><h2>Heat days tracker</h2>
+      <article class="pane" id="pane-history" data-pane="history" data-tracks="budget">
+        <header class="pane-head"><h2>How often it gets this hot</h2>
           <div class="seg" id="thrSeg" role="group" aria-label="Threshold">
             <button type="button" data-thr="95" aria-pressed="false">95°</button>
             <button type="button" data-thr="100" aria-pressed="true">100°</button>
             <button type="button" data-thr="105" aria-pressed="false">105°</button>
-            <button type="button" data-thr="110" aria-pressed="false">110°</button>
           </div>
           <button type="button" class="icon-btn small" data-max aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
         </header>
         <div class="pane-body scroll" id="historyBody"><div class="mute pad">Loading history…</div></div>
       </article>
 
-      <article class="pane" id="pane-priority" data-pane="priority">
-        <header class="pane-head"><h2>Response tracker</h2>
-          <button type="button" class="icon-btn small" data-max aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
-        </header>
-        <div class="pane-body scroll" id="priorityBody"><div class="mute pad">Ranking tracts…</div></div>
+      <article class="pane" id="pane-equity" data-pane="equity" data-tracks="today budget trees">
+        <header class="pane-head"><h2>Who this reaches</h2><span class="badge ghost">Equity audit</span></header>
+        <div class="pane-body scroll" id="equityBody"><div class="mute pad">Waiting for the decision…</div></div>
       </article>
 
-      <article class="pane" id="pane-graph" data-pane="graph">
-        <header class="pane-head"><h2>Tract graph</h2>
-          <label class="range" title="Hottest tracts shown"><span id="graphLimitVal">60</span><input id="graphLimit" type="range" min="20" max="200" step="10" value="60" aria-label="Tracts shown"></label>
+      <article class="pane" id="pane-graph" data-pane="graph" data-tracks="trees">
+        <header class="pane-head"><h2>Which groups bear the heat</h2>
+          <label class="range" title="Hottest areas shown"><span id="graphLimitVal">60</span><input id="graphLimit" type="range" min="20" max="120" step="10" value="60" aria-label="Areas shown"></label>
           <button type="button" class="icon-btn small" data-max aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
         </header>
         <div class="pane-body">
@@ -142,18 +136,26 @@
       </article>
     </section>
 
-    <footer class="foot">Offsets describe one afternoon's spatial pattern (NOAA Heat Watch), not a forecast: the forecast comes from the National Weather Service, and expected temperature is forecast high plus the predicted offset. Predictions are less certain away from the roads that were measured, and tracts outside that area are not shown. The assistant can make mistakes: check key figures against the panes.</footer>
+    <footer class="foot" id="foot"></footer>
   </main>
+</div>
+
+<div class="modal" id="proposalModal" hidden role="dialog" aria-modal="true" aria-labelledby="proposalTitle">
+  <div class="modal-card">
+    <header><h2 id="proposalTitle">Draft proposal</h2><button type="button" class="icon-btn small" id="proposalClose" aria-label="Close">×</button></header>
+    <div class="modal-body" id="proposalBody"></div>
+    <footer><span class="mute" id="proposalNote"></span><button type="button" class="btn" id="proposalCopy">Copy text</button></footer>
+  </div>
 </div>
 
 <script src="/static/common.js"></script>
 <script src="/static/voice.js"></script>
+<script src="/static/tracks.js"></script>
 <script src="/static/chat.js"></script>
-<script src="/static/kpis.js"></script>
+<script src="/static/decisions.js"></script>
 <script src="/static/map.js"></script>
 <script src="/static/forecast.js"></script>
 <script src="/static/history.js"></script>
-<script src="/static/priority.js"></script>
 <script src="/static/graph.js"></script>
 <script src="/static/workspace.js"></script>
 </body>

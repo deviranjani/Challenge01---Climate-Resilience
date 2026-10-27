@@ -9,7 +9,7 @@ from google.genai import types
 from . import callbacks, prompts
 from .config import load_settings
 from .context import AgentContext
-from .tools import community_profile, heat_frequency, predict_heat_offset, rank_response_sites
+from .tools import community_profile, heat_frequency, predict_heat_offset, rank_planting_sites, rank_response_sites, recommend_cooling_centers
 
 
 def thinking_planner(model: Any):
@@ -32,17 +32,34 @@ def build_sub_agents(ctx: AgentContext, model: Any = None) -> list[Agent]:
         Agent(
             name="prediction_analyst",
             model=model,
-            description="Predicts how much hotter or cooler a location is than average, explains why, "
-            "and ranks where heat relief should go first. Uses the BigQuery ML model.",
+            description="Predicts how much hotter or cooler a named area is than the city average and why, and for the Today track "
+            "ranks where to send hydration trucks, wellness checks or extended library hours. Uses the BigQuery ML model.",
             instruction=_instruction(prompts.PREDICTION),
             tools=[predict_heat_offset, rank_response_sites],
             **shared,
         ),
         Agent(
+            name="siting_analyst",
+            model=model,
+            description="Budget-cycle track: chooses where permanent cooling centers should go, with people covered, heat-day "
+            "frequency and an equity check.",
+            instruction=_instruction(prompts.SITING),
+            tools=[recommend_cooling_centers],
+            **shared,
+        ),
+        Agent(
+            name="planting_analyst",
+            model=model,
+            description="This-decade track: ranks areas for tree planting by excess heat, residents and poverty, with an equity audit.",
+            instruction=_instruction(prompts.PLANTING),
+            tools=[rank_planting_sites],
+            **shared,
+        ),
+        Agent(
             name="history_analyst",
             model=model,
-            description="Reports how often the city reaches a temperature and whether that is rising, "
-            "from seven years of weather-station history.",
+            description="Reports how often the city reaches a temperature and whether that is rising, from seven years of "
+            "weather-station history.",
             instruction=_instruction(prompts.HISTORY),
             tools=[heat_frequency],
             **shared,
@@ -50,8 +67,7 @@ def build_sub_agents(ctx: AgentContext, model: Any = None) -> list[Agent]:
         Agent(
             name="community_analyst",
             model=model,
-            description="Describes who lives around a location: population, age, poverty, "
-            "households without a car.",
+            description="Describes who lives in a named area: population, age, poverty, households without a car.",
             instruction=_instruction(prompts.COMMUNITY),
             tools=[community_profile],
             **shared,

@@ -11,7 +11,7 @@ from typing import Any
 
 from .bq import ToolError, run_query, table
 from .config import load_settings
-from .tools.prediction import _attributions, predict_all_tracts
+from . import tracts as tract_data
 
 MAX_POINTS = 5000
 CACHE_SECONDS = 600
@@ -77,28 +77,8 @@ def measured_points(limit: int = MAX_POINTS) -> dict[str, Any]:
 
 
 def tract_predictions() -> list[dict[str, Any]]:
-    """Every tract with the model's predicted offset, demographics and top drivers."""
-
-    def load() -> list[dict[str, Any]]:
-        out = []
-        for r in predict_all_tracts():
-            if r.get("predicted_offset_f") is None:
-                continue
-            out.append({
-                "geo_id": r["geo_id"],
-                "lat": r["latitude"], "lon": r["longitude"],
-                "offset_f": _num(r["predicted_offset_f"], 2),
-                "median_age": _num(r.get("median_age"), 1),
-                "poverty_rate": _num(r.get("poverty_rate"), 3),
-                "no_vehicle_rate": _num(r.get("no_vehicle_rate"), 3),
-                "total_pop": None if r.get("total_pop") is None else int(r["total_pop"]),
-                "drivers": _attributions(r.get("top_feature_attributions"))[:3],
-            })
-        if not out:
-            raise ToolError("No tract predictions available; check the model and demographics tables.")
-        return out
-
-    return _cached("tracts", load)
+    """Every tract inside the measured area with the model's predicted offset, demographics, drivers and area name."""
+    return tract_data.load_tracts()
 
 
 def _band(value: float | None, high: float, low: float, labels: tuple[str, str, str]) -> str | None:
@@ -128,7 +108,7 @@ def build_graph(tracts: list[dict[str, Any]], limit: int = GRAPH_DEFAULT_TRACTS)
 
     for t in chosen:
         tract_id = f"tract:{t['geo_id']}"
-        nodes.append({"id": tract_id, "label": "Tract", "name": str(t["geo_id"])[-6:], "group": "Tract",
+        nodes.append({"id": tract_id, "label": "Tract", "name": t.get("area") or str(t["geo_id"])[-6:], "group": "Tract",
                       "offset_f": t["offset_f"], "total_pop": t["total_pop"], "median_age": t["median_age"],
                       "poverty_rate": t["poverty_rate"], "no_vehicle_rate": t["no_vehicle_rate"],
                       "drivers": t["drivers"], "lat": t["lat"], "lon": t["lon"]})

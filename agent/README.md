@@ -29,24 +29,47 @@ must match the training table; if the data lane changes features, change them th
 Tool failures never raise to the model: each tool returns `{"status": "error" | "out_of_coverage", ...}`
 and the UI draws it as a notice. Locations outside the measured area are refused before the model is called.
 
-## Workspace
+## What it solves: three tracks
 
-The chat lives in the left panel; the right side is a workspace of panes that follows the conversation
-(ask about a place and the map flies there, ask for the ranking and the tracker highlights it).
+The page opens on a track. Each shows a specific problem card, the BigQuery data behind it, any live API used as a complement, and
+what the analysis cannot do. Only the panes that belong to the chosen track are shown.
+
+| Track | Decision | What we compute (all from BigQuery) | Shown |
+|---|---|---|---|
+| **Today** (emergency response) | Where hydration trucks, wellness checks and extended library hours go first | Areas ranked by predicted heat plus who is least able to cope, with a reason per stop | Map, dispatch list, tomorrow's heat (NWS forecast, a complement), equity audit |
+| **Budget cycle** (cooling centers) | Where permanent cooling centers go | Sites that cover the most heat-exposed, vulnerable people within walking distance without double counting; how often the city reaches 100 F | Map with walking radii, centers, heat-days tracker, equity audit, draft council proposal |
+| **This decade** (tree planting) | Where planting or cool pavement should start | Areas ranked by people x excess heat x poverty; what drives each area's heat | Map, planting priorities, tract graph, equity audit |
+
+The logic is in `heat_planner/tracks.py` as pure functions, so every number traces to a formula. Costs, land use, tree canopy and
+pavement are not in the data, and the app says so instead of estimating them.
+
+## Areas, not coordinates
+
+People ask about "Oak Cliff" or "75215". Structure comes from BigQuery: `tract_areas` maps every census tract to its ZIP code and city
+(`bash scripts/build_areas.sh`, from US Census ZIP boundaries). Names come from Google Maps Platform, live: reverse geocoding labels each
+tract with its neighbourhood, and Places text search turns a typed name into map bounds. Google content is held in memory for an hour
+and never stored; the server authenticates with its own service account, so there is no extra key. Both APIs
+(`geocoding-backend`, `places`) must be enabled. OpenStreetMap is not used: its ODbL licence is excluded by the challenge's data rules.
+
+## Panes
 
 | Pane | What it shows | Data |
 |---|---|---|
-| Trackers | Forecast high, peak expected temperature, people in hotter tracts, top priority tract, heat days | all of the below |
-| Live map | Google Maps (map, satellite, aerial, photorealistic 3D), live traffic, a deck.gl heat surface of the measured readings and the model's forecast per tract | `/api/map/points`, `/api/map/tracts` |
-| Forecast and scenario | NWS 7-day forecast; pick a day or a scenario high and see expected temperature by tract | `/api/forecast` |
-| Heat days tracker | Days a year at 95/100/105/110 F and whether that is changing | `/api/history` |
-| Response tracker | Tracts ranked by predicted heat, households without a car and age | `/api/priority` |
-| Tract graph | Neo4j-style graph of tracts linked to heat, poverty, car-access and age groups | `/api/graph` |
+| Problem card and trackers | The specific problem, data used, limits, four key numbers | `/api/tracks`, per-track endpoints |
+| Map | Google Maps (map, satellite, aerial, 3D), heat surface, predicted offset per area, the track's decision, walking radii | `/api/map/points`, `/api/map/tracts` |
+| Decision list | Ranked areas with the reason for each, controls, "Draft proposal" | `/api/today`, `/api/budget`, `/api/trees`, `/api/proposal` |
+| Who this reaches | Equity audit of the chosen areas against the city (race is never an input) | in each decision |
+| Tomorrow's heat (Today) | NWS 7-day forecast and a scenario high; expected temperature = scenario + predicted offset | `/api/forecast` |
+| Heat-days tracker (Budget) | Days a year at 95/100/105 F and the trend | `/api/history` |
+| Tract graph (This decade) | Neo4j-style graph of areas linked to heat, poverty, car-access and age groups | `/api/graph` |
 
-Expected temperature = forecast high + the model's predicted offset for a place. The forecast comes from the
-National Weather Service (public domain); the model supplies only the within-city difference.
+## Customer-facing: nothing about the stack is shown
 
-## Models
+The page does not name the models, the voice API, BigQuery ML or how the app is built, the assistant is instructed never to,
+`/api/health` returns only `{"ok": true}`, and API docs (`/api/docs`) are off. Technical details for judges and engineers live here
+in this README and in the pitch deck, not in the product.
+
+## Models (engineering notes)
 
 | Use | Model | Location |
 |---|---|---|

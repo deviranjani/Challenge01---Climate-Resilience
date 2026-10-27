@@ -9,6 +9,8 @@ from ..bq import ToolError
 
 logger = logging.getLogger(__name__)
 
+SOURCES = "NOAA Heat Watch street-level readings and Census (ACS) demographics."
+
 CAVEATS = [
     "Offsets describe one afternoon's spatial pattern (NOAA Heat Watch). They are not a forecast.",
     "Predictions away from the roads volunteers drove are extrapolation and less certain.",
@@ -42,6 +44,16 @@ def validate_coordinates(latitude: float, longitude: float) -> tuple[float, floa
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         raise ToolError("latitude must be in [-90, 90] and longitude in [-180, 180].")
     return lat, lon
+
+
+def clamp_float(value: Any, low: float, high: float, name: str) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ToolError(f"{name} must be a number.") from exc
+    if not (math.isfinite(number) and low <= number <= high):
+        raise ToolError(f"{name} must be between {low:g} and {high:g}.")
+    return number
 
 
 def clamp_int(value: Any, low: int, high: int, name: str) -> int:

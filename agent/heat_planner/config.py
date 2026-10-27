@@ -18,6 +18,7 @@ class Settings:
     project_id: str
     dataset: str
     model_name: str
+    bqml_type: str
     llm_model: str
     router_model: str
     live_model: str
@@ -35,6 +36,7 @@ def load_settings() -> Settings:
         project_id=os.environ.get("GOOGLE_CLOUD_PROJECT", ""),
         dataset=os.environ.get("BQ_DATASET", "a4i_climate"),
         model_name=os.environ.get("BQML_MODEL", "offset_model"),
+        bqml_type=os.environ.get("BQML_MODEL_TYPE", "Linear regression (BigQuery ML LINEAR_REG)"),
         llm_model=os.environ.get("HEAT_AGENT_MODEL", "gemini-4-argon"),
         # The root agent only picks a specialist, so a fast model keeps chat responsive (Argon takes 25-45s per call).
         router_model=os.environ.get("HEAT_ROUTER_MODEL", "gemini-3.8-flash"),

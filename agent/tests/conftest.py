@@ -9,9 +9,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
-    from heat_planner.tools import prediction
+    from heat_planner import areas, modeling, tracts
 
-    prediction._coverage.cache_clear()
-    prediction.clear_tract_cache()
+    def clear():
+        modeling._coverage.cache_clear()
+        modeling.clear_tract_cache()
+        tracts.clear_cache()
+        areas._names.clear()
+        areas._zips.clear()
+
+    clear()
     yield
-    prediction._coverage.cache_clear()
+    clear()

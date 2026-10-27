@@ -11,7 +11,7 @@
   const dayName = (d) => new Date(d.date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short" });
 
   function setScenario(high, source) {
-    state.scenarioHigh = high;
+    state.scenarioHigh = high; state.scenarioSource = source;
     if (slider) slider.value = high;
     if (bigNum) bigNum.textContent = `${fmt(high, 0)}°F`;
     if (bigTag) bigTag.textContent = source;
@@ -31,11 +31,11 @@
     const total = pop(exp);
     statsBox.replaceChildren(
       h("div", { class: "stats" },
-        h("div", { class: "stat" }, h("b", {}, `${fmt(peak.temp, 0)}°F`), h("span", {}, `hottest tract · ${String(peak.geo_id).slice(-6)}`)),
-        h("div", { class: "stat" }, h("b", {}, `${fmt(low.temp, 0)}°F`), h("span", {}, "coolest tract")),
-        h("div", { class: "stat" }, h("b", {}, `${over(100).length} tracts`), h("span", {}, `at or above 100°F · ${fmt(pop(over(100)), 0)} people`)),
-        h("div", { class: "stat" }, h("b", {}, `${over(105).length} tracts`), h("span", {}, `at or above 105°F · ${fmt(pop(over(105)), 0)} people`))),
-      h("div", { style: "margin-top:10px;font-size:12.5px" }, h("span", { class: "tag", style: `background:${color}` }, `${label} heat`), "planning tier for the hottest tract"),
+        h("div", { class: "stat" }, h("b", {}, `${fmt(peak.temp, 0)}°F`), h("span", {}, `hottest · ${peak.area}`)),
+        h("div", { class: "stat" }, h("b", {}, `${fmt(low.temp, 0)}°F`), h("span", {}, "coolest area")),
+        h("div", { class: "stat" }, h("b", {}, `${over(100).length} areas`), h("span", {}, `expected at 100°F or more · ${fmt(pop(over(100)), 0)} people`)),
+        h("div", { class: "stat" }, h("b", {}, `${over(105).length} areas`), h("span", {}, `expected at 105°F or more · ${fmt(pop(over(105)), 0)} people`))),
+      h("div", { style: "margin-top:10px;font-size:12.5px" }, h("span", { class: "tag", style: `background:${color}` }, `${label} heat`), "planning tier for the hottest area"),
       h("div", { class: "hbar", title: "Share of people in tracts at or above 100°F" }, h("i", { style: `width:${total ? (pop(over(100)) / total) * 100 : 0}%` })));
   }
 
@@ -58,13 +58,14 @@
         slider,
         h("div", { class: "actions" }, preset("102°F day", 102), preset("108°F heat wave", 108)),
         h("div", { style: "margin-top:10px" }, statsBox)),
-      h("div", { class: "mute", style: "font-size:11.5px;padding:0 14px 14px" }, `Source: ${fc.source}${fc.updated ? `, updated ${new Date(fc.updated).toLocaleString()}` : ""}. Expected temperature = scenario high + each tract's predicted offset.`));
+      h("div", { class: "mute", style: "font-size:11.5px;padding:0 14px 14px" }, `Live source: ${fc.source}${fc.updated ? `, updated ${new Date(fc.updated).toLocaleString()}` : ""}. This sets the day's high only. Where it is hotter or cooler comes from how much hotter or cooler each area runs than the city average: expected temperature = scenario high + that difference.`));
     setScenario(hottest.high_f, `${dayName(hottest)} forecast`);
-    const pill = $("#fcPill"); pill.textContent = `NWS forecast · ${fc.place || "Dallas"}`; pill.className = "pill ok";
   }
 
-  async function init() {
-    bus.on("data", updateStats);
+  let loaded = false;
+  async function load() {
+    if (loaded) return;
+    loaded = true;
     try {
       const fc = await getJson("/api/forecast");
       state.forecast = fc;
@@ -72,9 +73,9 @@
       bus.emit("forecast", fc);
     } catch (e) {
       body.replaceChildren(h("div", { class: "pad" }, h("div", { class: "err-card" }, e.message), h("div", { class: "mute", style: "margin-top:10px" }, "You can still explore scenarios by choosing a high temperature."),
-        h("div", { class: "actions", style: "margin-top:10px" }, h("button", { type: "button", class: "btn primary", onclick: () => { state.scenarioHigh = 102; bus.emit("scenario", { high: 102 }); } }, "Use a 102°F scenario"))));
-      const pill = $("#fcPill"); pill.textContent = "Forecast unavailable"; pill.className = "pill bad";
+        h("div", { class: "actions", style: "margin-top:10px" }, h("button", { type: "button", class: "btn primary", onclick: () => { state.scenarioHigh = 102; state.scenarioSource = "102°F scenario"; bus.emit("scenario", { high: 102 }); } }, "Use a 102°F scenario"))));
     }
   }
-  init();
+  bus.on("data", updateStats);
+  bus.on("track", (id) => { if (id === "today") load(); });
 })();

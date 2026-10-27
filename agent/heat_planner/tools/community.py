@@ -1,59 +1,36 @@
-"""Who lives around a place: census-tract demographics."""
+"""Who lives in an area: census demographics, compared with the city."""
 
 from typing import Any
 
-from google.cloud import bigquery
+from .. import tracts
+from ._areas import resolve, weighted, where
+from ._common import SOURCES, safe_tool
 
-from ..bq import ToolError, run_query, table
-from ..config import load_settings
-from ._common import clamp_int, safe_tool, validate_coordinates
+
+def _r(value: float | None, digits: int) -> float | None:
+    return None if value is None else round(value, digits)
 
 
 @safe_tool
-def community_profile(latitude: float, longitude: float, radius_km: int = 2) -> dict[str, Any]:
-    """Describe the people living around a location using census-tract data.
+def community_profile(area: str) -> dict[str, Any]:
+    """Describe the people living in a named area, and how that compares with the city.
 
     Args:
-        latitude: Latitude in decimal degrees.
-        longitude: Longitude in decimal degrees.
-        radius_km: Search radius in kilometres, 1 to 10. Defaults to 2.
+        area: A neighbourhood name such as "Oak Cliff", or a five-digit ZIP code in Dallas.
 
     Returns:
-        A dict with status, tracts_in_radius, total_population, and population-weighted
-        median age, poverty rate and share of households without a car.
+        A dict with status, the resolved area name, population, median age, poverty rate and share of households without
+        a car, each next to the city figure. Race and ethnicity are not used.
     """
-    lat, lon = validate_coordinates(latitude, longitude)
-    radius = clamp_int(radius_km, 1, 10, "radius_km")
-    settings = load_settings()
-    rows = run_query(
-        f"""SELECT COUNT(*) AS tracts,
-                   SUM(total_pop) AS people,
-                   SAFE_DIVIDE(SUM(IF(median_age > 0, median_age * total_pop, NULL)),
-                               SUM(IF(median_age > 0, total_pop, NULL))) AS median_age,
-                   SAFE_DIVIDE(SUM(poverty_rate * total_pop), SUM(total_pop)) AS poverty_rate,
-                   SAFE_DIVIDE(SUM(no_vehicle_rate * total_pop), SUM(total_pop)) AS no_vehicle_rate
-            FROM {table(settings, 'tract_demographics')}
-            WHERE ST_DWITHIN(ST_GEOGPOINT(tract_lon, tract_lat),
-                             ST_GEOGPOINT(@lon, @lat), @meters)""",
-        [bigquery.ScalarQueryParameter("lat", "FLOAT64", lat),
-         bigquery.ScalarQueryParameter("lon", "FLOAT64", lon),
-         bigquery.ScalarQueryParameter("meters", "FLOAT64", radius * 1000.0)],
-        settings,
-    )
-    row = rows[0] if rows else {}
-    if not row.get("tracts"):
-        raise ToolError(f"No census tracts found within {radius} km of that location.")
-
-    def rounded(value: Any, digits: int) -> Any:
-        return None if value is None else round(float(value), digits)
-
-    return {
-        "status": "ok",
-        "radius_km": radius,
-        "tracts_in_radius": int(row["tracts"]),
-        "total_population": int(row["people"] or 0),
-        "median_age": rounded(row["median_age"], 1),
-        "poverty_rate": rounded(row["poverty_rate"], 3),
-        "no_vehicle_rate": rounded(row["no_vehicle_rate"], 3),
-        "note": "Population-weighted averages of tract values. Race and ethnicity are not used by design.",
-    }
+    m = resolve(area)
+    if m["status"] != "ok":
+        return m
+    rows, city = m["tracts"], tracts.load_tracts()
+    mine = {k: weighted(rows, k) for k in ("median_age", "poverty_rate", "no_vehicle_rate")}
+    base = {k: weighted(city, k) for k in mine}
+    return {"status": "ok", "area": m["label"], "zip_codes": m["zip_codes"], "tracts": m["tract_count"],
+            "total_population": sum(t.get("total_pop") or 0 for t in rows),
+            "median_age": _r(mine["median_age"], 1), "poverty_rate": _r(mine["poverty_rate"], 3), "no_vehicle_rate": _r(mine["no_vehicle_rate"], 3),
+            "city": {"median_age": _r(base["median_age"], 1), "poverty_rate": _r(base["poverty_rate"], 3), "no_vehicle_rate": _r(base["no_vehicle_rate"], 3)},
+            "center": where(rows)["center"], "tract_ids": where(rows)["tract_ids"], "sources": SOURCES,
+            "note": "Population-weighted tract averages, measured area only. Race and ethnicity are not used by design."}

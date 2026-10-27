@@ -43,6 +43,7 @@
   }
 
   $$("#thrSeg button").forEach((b) => b.addEventListener("click", () => load(Number(b.dataset.thr))));
-  bus.on("threshold", (t) => { const near = [95, 100, 105, 110].reduce((a, b) => (Math.abs(b - t) < Math.abs(a - t) ? b : a)); load(near); });
-  load(100);
+  bus.on("threshold", (t) => { if (!loaded) return; const near = [95, 100, 105].reduce((a, b) => (Math.abs(b - t) < Math.abs(a - t) ? b : a)); load(near); });
+  let loaded = false;
+  bus.on("track", (id) => { if (id === "budget" && !loaded) { loaded = true; load(100); } });
 })();
