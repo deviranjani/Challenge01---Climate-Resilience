@@ -1,0 +1,20 @@
+graph TD
+    Browser["Browser (agent/ui/static)"] -->|"POST /api/chat"| API["FastAPI app (api.py)"]
+    API -->|"asyncio.to_thread"| Service["service.run()"]
+    Service --> Runner["ADK Runner (fresh per request)"]
+    Runner --> Root["heat_planner root agent (agent.py)"]
+    Root --> Prediction["prediction_analyst"]
+    Root --> History["history_analyst"]
+    Root --> Community["community_analyst"]
+    Prediction --> PredictTool["predict_heat_offset / rank_response_sites"]
+    History --> HistoryTool["heat_frequency"]
+    Community --> CommunityTool["community_profile"]
+    PredictTool --> BQ["bq.run_query() (bq.py)"]
+    HistoryTool --> BQ
+    CommunityTool --> BQ
+    BQ --> Dataset["BigQuery: a4i_climate (heat_observations, station_daily_temps, tract_demographics, offset_model)"]
+    PredictTool -.->|"ML.EXPLAIN_PREDICT"| Model["offset_model"]
+    Model --> Dataset
+    API -->|"/api/map/*, /api/graph"| MapData["mapdata.py"]
+    MapData --> BQ
+    Root -.->|"Gemini via Vertex AI"| Gemini["gemini-2.5-flash"]

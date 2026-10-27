@@ -1,0 +1,25 @@
+name: Governance Version Drift Detection
+# Planned (Gold gate G9). Checks this repo's installed bootstrap version footer against
+# the version recorded at scaffold time. A full cross-repo check against the canonical
+# one-thd/ai-governance source needs a credential this repo does not provision; see
+# orange-lens-ai-bootstrapper's coe-tier-rubric.yml G9 note for the full reasoning.
+# This workflow currently only checks internal consistency (the stamp this repo wrote
+# matches what it still has) — it does not yet detect upstream drift.
+on:
+  schedule:
+    - cron: "0 9 1 * *"
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  check-internal-stamp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check CLAUDE.md Version History footer is present
+        run: |
+          if ! grep -q "bootstrap v" CLAUDE.md; then
+            echo "CLAUDE.md is missing its bootstrap version stamp in Version History." >&2
+            exit 1
+          fi
+          echo "Bootstrap version stamp present in CLAUDE.md."
