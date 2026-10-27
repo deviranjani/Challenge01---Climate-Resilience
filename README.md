@@ -1,805 +1,428 @@
-# Challenge 1—Community Climate Resilience: Urban Heat
+# Heat Compass: urban heat planning for Dallas
 
-**Agents for Impact 2026**
+**Agents for Impact 2026 · Challenge 1: Community Climate Resilience (Urban Heat)**
 
----
+Heat Compass is a planning assistant for a city's heat response. A planner asks about a neighbourhood by name ("Oak Cliff", "75215"),
+by speaking or typing, and gets a ranked, explained answer for one of three real decisions: where to send help today, where to fund
+cooling centers this budget cycle, and where to start planting trees this decade. Every number comes from public data in BigQuery and a
+BigQuery ML model; the language model routes questions and writes short answers but never invents figures or writes SQL.
 
-## Why this one matters
+> The original challenge brief from the organisers is kept unchanged in [`instructions_README.md`](instructions_README.md).
+> Engineering notes for the agent code are in [`agent/README.md`](agent/README.md).
 
-Heat is the deadliest weather in America. In a typical year it kills more people than
-hurricanes, floods, and tornadoes combined—and unlike those, it kills quietly, indoors and
-on sidewalks, mostly among the old, the poor, and people who can't afford to run an air
-conditioner.
+**Live demo** (lab project, may be taken down after the event): <https://heat-planner-71387418964.us-east1.run.app>
 
-It is also the most *unequal* hazard. Two blocks in the same city, at the same hour on the same
-day, can differ by more than fifteen degrees. One has tree cover and low buildings. The other is
-parking lot and asphalt. The people walking those two blocks are having completely different
-days, and one of them is in danger.
+## Contents
 
-Cities know this in the abstract. What they don't have is a number for *this intersection*, an
-argument they can put in front of a council, and someone to ask when the question changes at
-4pm on a Thursday.
-
-**A city has a small budget, a hot summer coming, and a decision to make about where to put
-help.** Your job today is to build the thing that helps them make it well.
-
-### Why heat, specifically?
-
-Community climate resilience is a big tent—cold snaps, flooding, wind, air quality. We built
-this challenge around heat for one concrete reason: **it is the only climate hazard with a public
-dataset that resolves conditions *within* a city rather than between cities.**
-
-NOAA Heat Watch sends volunteers driving instrumented cars along fixed routes on one hot day,
-logging temperature roughly once per second. That gives you readings a block apart. Nothing
-comparable is published for cold, flood, or wind—and a challenge built on city-average data
-cannot answer *"this intersection, not the one two blocks north,"* which is the entire point of
-the exercise.
-
-So heat is the instrument, not the ceiling. The three tracks below are three genuinely different
-decisions, on three different clocks, for three different people. And if you want to take the
-same technique somewhere else—a cold-snap version, a flood version, indoor cooling access—that is exactly what [bringing your own data](#bringing-your-own-data) is for, and judges reward
-it.
+1. [The challenge](#1-the-challenge)
+2. [The problems we solve, by track](#2-the-problems-we-solve-by-track)
+3. [How we solve it](#3-how-we-solve-it)
+4. [Architecture](#4-architecture)
+5. [Google Cloud products used](#5-google-cloud-products-used)
+6. [Data](#6-data)
+7. [The model](#7-the-model)
+8. [What the app does](#8-what-the-app-does)
+9. [Rigor, equity and safety](#9-rigor-equity-and-safety)
+10. [Limitations and next steps](#10-limitations-and-next-steps)
+11. [Repository layout](#11-repository-layout)
+12. [Run, test and deploy](#12-run-test-and-deploy)
+13. [API reference](#13-api-reference)
+14. [Credits and licence](#14-credits-and-licence)
 
 ---
 
-## How to read this
+## 1. The challenge
 
-**This is a reference for your whole afternoon, not something to read end to end now.** It is
-long on purpose—you will Ctrl-F it at hour three. Here is what each of you needs in the first
-fifteen minutes.
+Heat is the deadliest weather in the United States, and it is the most unequal: two blocks in the same city, at the same hour, can differ
+by more than fifteen degrees. One has tree cover and low buildings; the other is parking lot. Cities know this in general but rarely have a
+number for *this intersection*, an argument they can put in front of a council, or something to ask when the question changes at 4 pm on a
+Thursday.
 
-| If you are… | Read now | Come back for |
-|---|---|---|
-| **Everyone, together** | [The four things](#the-four-things-youre-working-with) · [Three tracks](#three-tracks-one-architecture) · [What you're building](#what-youre-building) · [Pick your city](#now-pick-your-city) | —decide these before anyone opens a keyboard |
-| **Team lead** | [Step 0](#step-0organize-your-team) · [How you'll be judged](#how-youll-be-judged) | [What will set yours apart](#what-will-set-yours-apart)—read it *before* the team writes code, not after |
-| **Data lane** | [Data lane](#data-lane2-to-3-people) · [Step 4, load the data](#step-4load-the-data) · [What you'll have](#what-youll-have) | [The data, and why we chose it](#the-data-and-why-we-chose-it) · [What would unlock what](#what-would-unlock-what) |
-| **Agent lane** | [Agent lane](#agent-lane2-to-3-people) · [The technology](#the-technology-youll-use) | [What "a tool you built" means](#what-a-tool-you-built-means-and-why-we-ask) · [`agent/README.md`](agent/) |
-| **Front end lane** | [Front end lane](#front-end-lane2-people) · [Step 3, Cloud Shell](#step-3everyone-get-into-cloud-shell) | [Your output artifact](#your-output-artifact-the-placement-recommendation) |
-| **Story lane** | [What you're building](#what-youre-building) · [Story lane](#story-lane1-to-2-people-starting-at-minute-zero) | [What "auditing the outcome" actually means](#what-auditing-the-outcome-actually-means)—judges look for this |
+The challenge asks each team to build **a planning assistant for one city's heat response** that:
 
-**Three things everybody should know by the end of hour one**, whatever lane you are in:
+- answers for places nobody ever measured, by **calling a prediction model**, not by describing historical rows;
+- explains *why* a place is hot, because the explanation is what turns a number into an argument;
+- serves one of three decisions (the **tracks**), on three different time horizons;
+- is built with **Google ADK in Python**, Gemini, BigQuery, at least one tool the team designed, and **BigQuery ML** as the required
+  differentiator, and is **deployed on Google Cloud**;
+- handles data honestly: licences, validation, bias (race is kept out of the model and the *outcome* is audited), and clear statements of
+  what the model cannot do.
 
-1. **Your model predicts an *offset*, not a temperature.** Not "it will be 106° here" but
-   "this spot runs 8° hotter than the rest of the city." Everything the agent says and everything
-   the deck claims depends on getting that right, and it is the easiest thing in the challenge to
-   describe wrongly on stage. [Why we frame it that way.](#and-one-required-differentiator-bigquery-ml)
-2. **Your agent has to actually *call* the prediction.** Querying the historical readings and
-   describing them is the most common way to miss the point while appearing to hit it—the whole
-   challenge is answering for locations nobody ever measured.
-3. **The street-level data is a single day, and many cities carry no timestamp at all.** That is
-   expected, not a broken load. If `observed_at` comes back entirely null, your city's campaign
-   simply did not record clock times—every reading still sits inside the same one-hour window,
-   which is exactly why the offset works. "How often does this happen?" is answered by the seven
-   years of station history instead, and *that* distinction is what a judge will probe.
+Judges score the submission (repo, deck, video), not a conversation, on impact and insight, technical execution, rigor and judgment, and
+craft. Full text: [`instructions_README.md`](instructions_README.md).
 
----
+## 2. The problems we solve, by track
 
-## The four things you're working with
+We built all three tracks for **Dallas, Texas**. The page opens on a track; each shows the specific problem, the data behind it, and what it
+cannot do.
 
-These turn up as column names later, so it's worth thirty seconds now:
+| Track | The decision | The problem | What the planner gets |
+|---|---|---|---|
+| **Respond Today** (emergency management) | It is 102°F tomorrow. Where do hydration trucks, wellness checks and extended library hours go first? | Heat is most dangerous for people who cannot leave it: older residents, households without a car, people in the hottest blocks. Dispatch has a few trucks and a few hours. | A ranked dispatch list by area with a plain reason for each stop, an interactive **fleet plan** that splits the trucks you have across those areas, tomorrow's forecast, and a check on who the list reaches. |
+| **Fund Cooling Centers** (city planning, answerable to a council) | We can fund **three** permanent cooling centers. Where do they go? | A permanent building must serve many heat-exposed people, often, without two centers competing for the same neighbourhood, and it must survive a council meeting. | Three sites with the people each covers (no double counting), how often the city reaches 100°F, what the three cover together, an equity check and a **draft council proposal**. |
+| **Grow the Canopy** (sustainability and forestry) | Where should tree planting or cool pavement start? | Planting is slow and permanent, so it should start where excess heat, many residents and past under-investment overlap, and the plan should be checked against whether it repeats or repairs that history. | A ranked planting program by area, what drives each area's heat, a graph of which groups bear the heat, an equity audit, and a draft brief. |
 
-| Term | What it means here |
+## 3. How we solve it
+
+### The key idea: predict the offset, not the temperature
+
+NOAA's Heat Watch campaigns put volunteers in cars with sensors on one hot day. Because every reading is taken within about an hour, the
+differences between readings are **purely spatial**: pavement, buildings, tree cover. We train a model to predict the **offset**, how many
+°F hotter or cooler an area runs than the campaign average. A planner adds the day's forecast high to get an expected temperature for any
+area: *expected temperature = forecast high + predicted offset*.
+
+### The pipeline
+
+1. **Load** NOAA Heat Watch readings, GHCN-Daily station history and Census ACS demographics into BigQuery
+   ([`notebooks/c1_01_load_explore.ipynb`](notebooks/c1_01_load_explore.ipynb), [`scripts/load.sh`](scripts/load.sh)).
+2. **Map tracts to areas** in BigQuery: each census tract is matched to its ZIP code area from Census ZIP boundaries
+   ([`scripts/build_areas.sh`](scripts/build_areas.sh)). Neighbourhood names ("Oak Cliff") come live from Google Maps.
+3. **Train** a BigQuery ML linear regression on the offset, and serve it with `ML.EXPLAIN_PREDICT` so every prediction comes with the
+   features that drove it ([ADR-001](docs/adr/ADR-001-bigquery-ml-explain-predict-for-heat-offset.md)).
+4. **Predict for every census tract** inside the measured area (one BigQuery query), join demographics and area names, and cache the
+   result ([`modeling.py`](agent/heat_planner/modeling.py), [`tracts.py`](agent/heat_planner/tracts.py)).
+5. **Decide**: pure, tested functions turn those per-area rows into each track's answer ([`tracks.py`](agent/heat_planner/tracks.py)).
+6. **Explain and converse**: a Google ADK agent tree routes a planner's question to a specialist, which calls a tool and writes a short
+   answer; the page draws the results as cards, maps and charts.
+
+### The decision logic (all in `tracks.py`, all traceable to a formula)
+
+| Track | Method |
 |---|---|
-| **Campaign** | One city's Heat Watch day—volunteers driving fixed routes, three one-hour windows. Your `heat_observations` table is one campaign. |
-| **Traverse** | A single drive along one of those routes. Thousands of readings, one per second or so. |
-| **Offset** | How much hotter a spot is **than its own city's average** on that campaign day. Not a temperature—a difference. This is what your model predicts. |
-| **Track** | Which of the three decisions below your team chose to solve. Nothing to do with traverses, unhelpfully. |
+| Respond Today | Each area is scored by a weighted blend of z-scores across areas. *Hydration trucks:* 0.5 heat + 0.3 no-car share + 0.2 median age. *Wellness checks:* 0.4 age + 0.35 heat + 0.25 poverty. *Extended library hours:* 0.4 heat + 0.35 no-car share + 0.25 people. The **fleet plan** gives one unit to each of the top areas first, then spreads the rest by score with largest-remainder rounding, so it always adds up to the fleet you have. |
+| Fund Cooling Centers | Greedy coverage. *Need* = people × predicted excess heat × (1 + poverty rate + no-car share). Each center is the tract centre that covers the most **not-yet-covered** need within the walking radius (default 1.5 km), so two centers never count the same people. Exactly three centers are funded. Cost is a planner input; land use is not in the data. |
+| Grow the Canopy | *Priority* = people × predicted excess heat × (1 + poverty rate). The tool states that it **cannot** tell whether planting or cool pavement fits an area, because no canopy or pavement data is loaded. |
+| All three | An **equity audit** compares the chosen areas with the whole city (population-weighted poverty, households without a car, median age). Race and ethnicity are never inputs. |
 
----
+## 4. Architecture
 
-## Three tracks, one architecture
+```mermaid
+flowchart LR
+  subgraph Browser["Planner's browser"]
+    UI["Single-page UI<br/>chat, map, trackers, panels"]
+    MIC["Microphone<br/>16 kHz audio"]
+  end
 
-Heat is one problem with several different decisions attached to it, and they belong to
-different people on different clocks. **Pick the one your team wants to solve.** The data and the
-model are the same for all three—what changes is who's asking, what they can actually do about
-it, and what a good answer looks like.
+  subgraph Run["Cloud Run service: heat-planner (FastAPI + Google ADK)"]
+    API["FastAPI<br/>REST and WebSocket"]
+    SVC["service.run<br/>fresh agent tree per request"]
+    ROOT["Root agent<br/>routes the question"]
+    SUBS["Five specialist agents<br/>prediction, siting, planting,<br/>history, community"]
+    TOOLS["Python tools<br/>fixed SQL plus parameters"]
+    LOGIC["tracks.py<br/>dispatch, fleet, cooling centers,<br/>planting, equity audit"]
+    AREAS["areas.py<br/>name to census tracts"]
+    LIVE["live.py<br/>voice proxy"]
+    PROP["proposal.py<br/>draft memo"]
+  end
 
-**These are suggestions, not a menu you're confined to.** Pick one, combine two, or invent your
-own—if you can see a community climate-resilience problem in the same vein that these three miss,
-that is exactly the kind of judgment this challenge rewards. Just be ready to say why yours is
-worth solving.
+  subgraph BQ["BigQuery: dataset a4i_climate"]
+    T1[("heat_observations<br/>NOAA Heat Watch")]
+    T2[("tract_demographics<br/>Census ACS")]
+    T3[("station_daily_temps<br/>GHCN-Daily")]
+    T4[("tract_areas<br/>tract to ZIP")]
+    M1{{"offset_model<br/>BigQuery ML"}}
+  end
 
-| Track | The decision | Who's asking |
+  subgraph Vertex["Vertex AI"]
+    G1["Gemini 3.8 Flash<br/>routing and chat answers"]
+    G2["Gemini 4 Argon<br/>proposal drafts"]
+    G3["Gemini Live<br/>speech to text"]
+  end
+
+  subgraph Maps["Google Maps Platform"]
+    MJ["Maps JavaScript API<br/>aerial and 3D views"]
+    PL["Places and Geocoding APIs<br/>area names"]
+  end
+
+  NWS["National Weather Service<br/>forecast API"]
+
+  UI -->|"chat, panels, map data"| API
+  MIC -->|"audio over WebSocket"| LIVE
+  UI -.->|"map tiles"| MJ
+  API --> SVC --> ROOT --> SUBS --> TOOLS --> LOGIC
+  API --> PROP
+  LOGIC -->|"ML.EXPLAIN_PREDICT"| M1
+  LOGIC --> T1
+  LOGIC --> T2
+  TOOLS --> T3
+  AREAS --> T4
+  LOGIC --> AREAS
+  AREAS -->|"names and bounds"| PL
+  ROOT -.-> G1
+  SUBS -.-> G1
+  PROP -.-> G2
+  LIVE -.-> G3
+  API -->|"7-day forecast"| NWS
+```
+
+### One chat request, end to end
+
+```mermaid
+sequenceDiagram
+  participant U as Browser
+  participant A as FastAPI
+  participant R as Root agent
+  participant S as Specialist agent
+  participant T as Tool
+  participant B as BigQuery and BigQuery ML
+  U->>A: POST /api/chat with the question and the chosen track
+  A->>R: build a fresh agent tree for this request
+  R->>S: hand over to the right specialist
+  S->>T: call a tool with an area name, for example Oak Cliff
+  T->>B: fixed SQL with parameters, ML.EXPLAIN_PREDICT per tract
+  B-->>T: predictions with drivers, plus demographics
+  T-->>S: structured result
+  S-->>A: short answer and follow-up questions
+  A-->>U: answer, result cards and follow-ups
+  Note over U: The map, list and trackers follow the answer
+```
+
+### Design decisions worth knowing
+
+- **Stateless server.** Each chat request builds a fresh agent tree and an in-memory session; the browser sends the history. Cloud Run can
+  scale or restart without losing anything.
+- **The model never writes SQL.** Tools run fixed SQL with query parameters through one function (`bq.run_query`), which also caps bytes
+  billed and rows returned. A custom Python tool, not MCP Toolbox SQL, wraps the prediction
+  ([ADR-002](docs/adr/ADR-002-custom-prediction-tool-over-mcp-toolbox-sql.md)).
+- **The decision logic is not in the prompt.** Rankings, allocations and audits are plain Python with tests, so the figures a judge sees
+  trace to a formula, and the language model only phrases them.
+- **BigQuery first, live APIs second.** Every prediction and ranking comes from BigQuery. Google Maps, Places, Geocoding and the National
+  Weather Service add context (names, tiles, tomorrow's high); they never replace the BigQuery numbers.
+- **Per-request speed choices.** A fast model does the routing and chat answers; the stronger, slower model only drafts proposals.
+- *The older diagram in [`docs/architecture/architecture-horizontal.png`](docs/architecture/architecture-horizontal.png) and the text in
+  `docs/ARCHITECTURE.md` describe the first version of the app (three agents, Gemini 2.5 Flash, no tracks, areas, voice or maps).*
+
+## 5. Google Cloud products used
+
+| Product | What we use it for | Where |
 |---|---|---|
-| ⚡ **Today** | It's 102° tomorrow. Where do the hydration trucks, wellness checks, and extended library hours go? | Emergency management |
-| 🏛️ **This budget cycle** | We can fund three permanent cooling centers. Where? | City planning, answerable to a council |
-| 🌳 **This decade** | Where does tree planting or cool pavement buy the most relief per dollar? | Sustainability, urban forestry |
+| **Cloud Run** | Hosts the app (FastAPI plus the ADK agents), service `heat-planner` in `us-east1`, with one warm instance to avoid cold starts | [`agent/Dockerfile`](agent/Dockerfile) |
+| **Cloud Build** and **Artifact Registry** | Build the container from source on every deploy and store the images (`gcloud run deploy --source`) | deploy command in [section 12](#12-run-test-and-deploy) |
+| **BigQuery** | The data store: heat readings, demographics, station history, tract-to-ZIP map; all app queries are parameterised | [`bq.py`](agent/heat_planner/bq.py) |
+| **BigQuery ML** | `offset_model` (linear regression) trained on the offset; served with `ML.EXPLAIN_PREDICT`; quality read with `ML.EVALUATE` | [`modeling.py`](agent/heat_planner/modeling.py) |
+| **BigQuery public datasets** | `ghcn_d` (NOAA station history), `census_bureau_acs` and `geo_census_tracts` (demographics and tract points), `geo_us_boundaries.zip_codes` (ZIP polygons) | notebook, [`scripts/build_areas.sh`](scripts/build_areas.sh) |
+| **Vertex AI: Gemini** | Gemini 3.8 Flash routes questions and writes chat answers; Gemini 4 Argon drafts proposals (global endpoint) | [`agent.py`](agent/heat_planner/agent.py), [`proposal.py`](agent/heat_planner/proposal.py) |
+| **Gemini Live API** | Speech to text: the browser streams audio through a same-origin WebSocket to the server, which holds the Live session (`gemini-live-2.5-flash-native-audio`, `us-central1`) | [`live.py`](agent/heat_planner/live.py), [`voice.js`](agent/ui/static/voice.js) |
+| **Agent Development Kit (ADK)** | The agent tree: one router and five specialists, callbacks for the step budget and result cards | [`agent.py`](agent/heat_planner/agent.py), [`sub_agents.py`](agent/heat_planner/sub_agents.py) |
+| **Google Maps Platform** | **Maps JavaScript API** (map, satellite, aerial, live traffic), **Map Tiles / Photorealistic 3D** (3D aerial view), **Places API (New)** (typed area name to map bounds), **Geocoding API** (tract to neighbourhood name) | [`map.js`](agent/ui/static/map.js), [`areas.py`](agent/heat_planner/areas.py) |
+| **API keys** | One browser key for Maps, restricted to the Maps JavaScript and Map Tiles APIs and to the app's own URLs; the server calls Places and Geocoding with its own service account instead | [section 9](#9-rigor-equity-and-safety) |
+| **IAM and service accounts** | The Cloud Run runtime service account is the only credential for BigQuery, Vertex AI, Places and Geocoding; no key files | [section 12](#12-run-test-and-deploy) |
+| **Cloud Logging** | Request and per-model-call timings, used to find and fix the slow model calls | [`callbacks.py`](agent/heat_planner/callbacks.py) |
+| **Colab Enterprise** | Runs the data-loading notebook in the lab project | [`notebooks/`](notebooks/) |
+| **Cloud Storage** | Public pre-staged data snapshot used by the headless loader | [`scripts/load.sh`](scripts/load.sh) |
 
-### What a strong version of each looks like
+Also used, not from Google Cloud: the **National Weather Service API** (public domain forecast), **deck.gl** (heat surface over the map),
+**vis-network** (the tract graph), **FastAPI** and **uvicorn**.
 
-**⚡ Today**—the hard part isn't finding the hot blocks, it's reaching people who *can't leave*.
-A strong version leans on `no_vehicle_rate` and median age, and outputs something a dispatcher
-could act on in twenty minutes: a ranked list with addresses and a reason per stop. Fully
-supported by the data you'll load.
+## 6. Data
 
-**🏛️ This budget cycle**—permanence needs justification, and that's where the seven years of
-station history earn their place. A location that's +8°F matters far more in a city crossing 95°F
-thirty times a summer than twice. A strong version pairs the prediction with that frequency and
-produces something that survives a council meeting, including what it costs and what it displaces.
-Fully supported.
+All data is public domain or CC0, loaded into BigQuery dataset `a4i_climate` (location `US`).
 
-**🌳 This decade**—this is the one where `ML.EXPLAIN_PREDICT` does its best work, and most teams
-will miss it. The attributions don't just tell you *where* it's hot, they tell you **why**—and
-the feature driving the offset is the thing to change. If impervious surface dominates, that's a
-pavement problem. If it's building density and land-use mix, that's a canopy and open-space
-problem. **Your model can recommend the intervention, not just the location.**
+| Table | Content | Size in our run | Source |
+|---|---|---|---|
+| `heat_observations` | Street-level temperature, humidity, heat index and position along volunteer drives | **2,000** readings (Dallas) | NOAA/CAPA Heat Watch, CC0 |
+| `tract_demographics` | Population, median age, poverty, households without a car, housing age per census tract | 559 tracts, 583,970 people in the 135 inside the measured area | Census ACS |
+| `station_daily_temps` | Daily maximum temperature at weather stations near Dallas | 27,187 station-days, 2019 to 2025 | NOAA GHCN-Daily |
+| `tract_areas` | Census tract to ZIP code area and city | 559 tracts, 113 ZIP areas | Census ZIP boundaries (US Government) |
+| `training` | The model's training table: each reading joined to its nearest tract | 2,000 rows | derived |
 
-One honest limit on that last track: you can identify candidates and diagnose the cause, but you
-**cannot simulate the fix**—nothing in the data tells you what the offset becomes after you
-plant. Say that out loud rather than implying otherwise. Judges reward it.
+**Live (not stored):** neighbourhood names from Google Maps (held in memory for an hour, never saved, as Google's terms require) and the
+7-day forecast from the National Weather Service.
 
-**Can you do more than one?** Yes, and a real planning assistant would. But three shallow tracks
-lose to one that's genuinely good, and you have four and a half hours.
+**What we deliberately left out.** Race and ethnicity columns are not loaded and never used as inputs
+([ADR-003](docs/adr/ADR-003-exclude-race-as-model-input.md)). OpenStreetMap neighbourhood names are not used because the ODbL licence is
+excluded by the challenge's data rules.
 
----
+**Data problems we found and fixed** (the kind that fail silently):
 
-## What you're building
+- The Census table uses `-666666666` for "not available". It had leaked into housing age and median age for 15 tracts and made the model
+  predict absurd values. These are now treated as missing.
+- The Census income column loaded **empty**, so income is not available and is not used.
+- The ACS tract id drops its leading zero for some states; the loader pads it before joining.
+- The NOAA service returns at most 2,000 rows per request, so our load truncated the Dallas campaign (19,491 points exist). See
+  [limitations](#10-limitations-and-next-steps).
+- Predictions far outside the measured roads blew up (tens of °F) because of the squared coordinate features, so only tracts inside the
+  measured area are scored.
 
-**A planning assistant for a city's heat response.** Not a dashboard, and not a single query
-with a chat box on it—an agent a planner can hold a working conversation with, that reaches
-for real data and a real model to answer.
-
-**One afternoon, one planner.** It's 3:40 on a Tuesday in July, the forecast for Thursday is
-102°F, and Dana in the city manager's office has a meeting at nine tomorrow. Everything below is
-a question she asks between now and then:
-
-| What they ask | What answers it |
-|---|---|
-| *"We can fund three cooling centers this summer. Where should they go?"* | Your BQML model, ranked against demographics |
-| *"Why is 4th and Marsalis so much worse than two blocks north?"* | `ML.EXPLAIN_PREDICT` attributions |
-| *"How often does that area actually hit dangerous heat? Is it getting worse?"* | Seven years of station history |
-| *"Who lives around that site—how many people, how old, how many without a car?"* | Census tract demographics |
-| *"I'm down to two sites and have to pick one. Make the case for each."* | Both, plus Gemini weighing the tradeoff |
-| *"Draft the proposal I'm taking to council in the morning."* | Gemini, synthesizing everything above |
-| *"Before I send it—did we actually reach the neighborhoods that need this most?"* | An equity audit of your own output |
-
-Notice these need **different things**. Some need a prediction. Some need only a query against
-history. Some need the agent to weigh a tradeoff and say why. One needs it to write prose a
-human will sign their name to.
-
-**That range is the challenge.** An agent that can only answer the first question is a model
-with a chat box. An agent that handles all seven is something a planner would keep open.
-
-Your track shifts the specific questions—an emergency manager asks about tomorrow, a forestry
-office asks about a decade. It doesn't change the shape. Some need a prediction, some need only a
-query, some need the agent to weigh a tradeoff, and one needs it to write prose.
-
-## Now pick your city
-
-**This is not a universal application. It is an application for one city**, and choosing yours
-is the first real decision your team makes. Everything downstream—your data, your model, your
-demo, your story—lives in that city.
-
-You do **not** have to pick the city you're sitting in.
-
-Start here. These have the largest, best-tested datasets:
-
-| City | Street-level readings | |
-|---|---:|---|
-| **Houston** | ~147,000 | the largest campaign by far, and the slowest to load |
-| **Chicago** | ~49,000 | |
-| **Seattle** | ~35,000 | |
-| **Atlanta** | ~23,000 | |
-| **Dallas** | ~19,000 | the notebook default |
-| **Los Angeles (Central)** | ~17,000 | |
-| **New York (Brooklyn)** | ~15,000 | |
-| **New York (Manhattan/Bronx)** | ~12,000 | |
-
-More readings means more for your model to learn from and a slightly longer load. Fewer is not
-disqualifying—Manhattan's 12,000 points still cover the borough densely, because the routes
-are short. But if your team wants volume to play with, start at the top of that list.
-
-**We'd recommend staying on this list.** There are 68 cities available and Section 4 of the
-notebook lists them all, but these are the ones we've tested end to end.
-
-Then get specific, because specificity is what makes a demo land:
-
-> *"We're the City of Dallas. It's July, we've had eleven days over 100°F, and we have
-> funding for four new cooling centers plus one mobile hydration unit. We don't know where to
-> put them, and the council meets in three weeks."*
-
-That's your scenario. Write it down. Everything you build should answer to it.
-
----
-
-## The technology you'll use
-
-Every team, every challenge, uses the same core stack:
+## 7. The model
 
 | | |
 |---|---|
-| **ADK** (Agent Development Kit) | You build your agent in Python with ADK. This is the frame everything else hangs on. |
-| **Gemini** | The reasoning model behind the agent—interpreting what the planner meant, weighing tradeoffs, drafting the proposal. |
-| **BigQuery** | All the data this challenge needs lives here, and your agent queries it. |
-| **A managed MCP server** | Consume at least one—don't author your own. See below. |
-| **At least one tool you built** | A Python function tool, or a tool you defined yourself in MCP Toolbox. See below. |
-| **Deployed to Google Cloud** | Agent Runtime or Cloud Run, your choice. It has to actually run somewhere. |
+| Type | BigQuery ML linear regression (`LINEAR_REG`), model `a4i_climate.offset_model` |
+| Target | `offset_f`: °F above the campaign average at that spot |
+| Features (11) | latitude, longitude, distance from the centre of the readings, latitude², longitude², latitude×longitude, tract median age, median year homes were built, poverty rate, share of households without a car, population |
+| Served with | `ML.EXPLAIN_PREDICT`: a prediction plus the top feature attributions for every tract |
+| Fit quality | **R² 0.38, mean absolute error 0.63°F** (BigQuery ML's own `ML.EVALUATE`). A modest score is expected for one day of data; a near-perfect one would signal leakage. |
+| Excluded on purpose | the temperature itself, heat index and humidity (they leak the answer); race and ethnicity; timestamps (empty for this city) |
 
-### One more thing already set up for you
+To make attributions readable, the model's geographic terms are shown as one driver, **"Location in the city"**. An honest reading of
+the model is that *where an area sits* explains much of the pattern, because it has no tree canopy, pavement or building data. Adding
+those layers is the biggest upgrade ([limitations](#10-limitations-and-next-steps)).
 
-**Also already set up for you, and worth ten seconds now rather than later: Antigravity.** Your
-Google Skills lab environment has a button that launches the **Antigravity IDE**, and the
-**Antigravity CLI** is one word away in Cloud Shell—type `agy`. Not required, and nothing here
-depends on either, but we strongly recommend you use one: every lane has tedious work a coding
-agent will happily absorb. [Details in Step 3](#strongly-recommended-antigravity-the-ide-and-the-cli).
+## 8. What the app does
 
-### Choosing your MCP server
+- **Chat assistant** in the left panel. Ask about an area by name or ZIP code, by typing or by pressing the microphone. Replies are short and
+  come with result cards; clicking a row flies the map there. Follow-up questions are suggested. If you ask for five cooling centers it
+  explains that the budget funds three.
+- **Track workspace** on the right: a problem card, four key numbers, and only the panels that belong to the chosen track.
+- **Map**: Google Maps with a heat surface of the measured readings, a circle per area coloured by predicted offset, the track's decision
+  (numbered dispatch stops, cooling centers with their walking radius, planting areas), live traffic on the Today track, and satellite,
+  aerial and photorealistic 3D views.
+- **Respond Today**: dispatch list with three focuses (hydration trucks, wellness checks, library hours); **Fleet plan** slider; tomorrow's
+  heat from the National Weather Service with a scenario slider (try a 102°F day) that turns the offsets into expected temperatures.
+- **Fund Cooling Centers**: the three proposed sites, a walking-radius control, an optional cost per center, a heat-days chart (95, 100 and
+  105°F, 2019 to 2025), and a chart of what the three centers cover as they are added.
+- **Grow the Canopy**: ranked planting areas with their drivers and a graph linking areas to heat, poverty, car-access and age groups.
+- **Who this reaches**: the equity audit, in every track.
+- **Draft proposal**: one click writes a dispatch brief, council proposal or planting brief from the on-screen figures only, and says what
+  is missing (cost, land use, canopy).
+- **Notices**: the page tells users that Google Maps is sometimes unavailable (try a ZIP code) and that the approach can be extended to
+  every state.
 
-You have two good options, and you should consume one rather than writing your own:
+## 9. Rigor, equity and safety
 
-- **BigQuery's built-in MCP server**—the quickest path if all you need is to query your tables.
-- **[MCP Toolbox for Databases](https://github.com/googleapis/mcp-toolbox)**—Google's open
-  source MCP server for databases. It ships prebuilt tools for immediate access *and* a
-  framework for defining your own, with controls like restricted access and structured queries.
+**Equity audit (results from our run).** The hydration-truck list reaches areas with a poverty rate of **35% against 21%** for the city,
+**26% of households without a car against 10%**, and a median age of 40.7 against 32.5. The cooling-center and planting lists come out
+**"mixed"** (for example 19% poverty against 21%): the model finds where it is hot, which is not always where heat hurts most. We report
+that rather than hide it.
 
-**The Toolbox is generally the more flexible of the two**, and if you want your agent's database
-access shaped to your own tools rather than generic queries, start there.
+**Validation.** 88 automated tests cover the track logic, area resolution, allocation, tools, API, agent wiring and the voice proxy. They
+mock BigQuery at one boundary and drive the real ADK loop with a scripted model, so no test calls a live service.
 
-### What "a tool you built" means, and why we ask
+**Safety by design.**
 
-You could, in principle, run the prediction through MCP Toolbox—it lets you define a tool as
-parameterized SQL, so the `ML.PREDICT` call itself can be a Toolbox tool with no Python at all.
-That's a legitimate design and we're not going to pretend otherwise.
+- The language model only calls tools. SQL is fixed and parameterised; every query has a bytes-billed cap and a row cap.
+- Every tool is wrapped so exceptions never reach the model or the browser; they become a plain message.
+- The assistant is told never to invent numbers, never to use race or ethnicity, and never to mention how the system is built. The public
+  API reveals no models or configuration, and API docs are off.
+- Inputs are bounded (question length, history length, fleet size, radius). The voice WebSocket accepts only same-origin connections and is
+  capped at 60 seconds and four sessions.
+- Secrets come from the environment; nothing is hard-coded. The Maps key is restricted to the Maps APIs and the app's own URLs.
+- Static files are versioned and always revalidated, so a deploy is never served with stale scripts or styles.
 
-**The requirement is one tool you designed, in either form.** What we're actually looking for is
-the work that *isn't* a single query: turning "somewhere on the south side" into a bounding box,
-turning `ML.EXPLAIN_PREDICT`'s nested attributions into *"impervious surface contributed +4.2°"*,
-assembling a Placement Recommendation from four sources, deciding what to do when the model has no
-answer for a location. That tends to want Python. But if you can express it in Toolbox and defend
-the choice, that counts.
+## 10. Limitations and next steps
 
-What doesn't count is consuming only prebuilt generic tools and calling that your design.
+We state these plainly because the model is only as good as its data.
 
-> **Hint worth taking:** run the Toolbox as a container on **Cloud Run with minimum instances
-> set to 1**. Cloud Run scales to zero by default, which means the first request after an idle
-> period pays a cold start—and the first request after an idle period is usually the one you
-> make on stage. Pinning one warm instance costs very little for a day and removes an entire
-> class of demo failure.
+- **One day, one city.** Heat Watch is a single hot afternoon. It ranks *places*; it cannot forecast.
+- **A sample of the readings.** Our run holds 2,000 of Dallas's 19,491 readings, in two clusters (west and south-east). The NOAA service
+  caps each request at 2,000 rows; re-running the load in smaller chunks restores the full set and should improve the model.
+- **Modest fit (R² 0.38) and mostly spatial drivers.** With no tree canopy, pavement or building data, the model cannot say *why* a place
+  is hot beyond where it is. Adding EPA Smart Location or a city canopy layer is the clear next step, and it would unlock the "planting or
+  cool pavement?" answer for Grow the Canopy.
+- **No cost, land or route data.** Cooling-center cost, land availability and displacement are not in the data (the planner enters a cost);
+  coverage is straight-line distance, not walking routes; the fleet plan does not model drive times.
+- **Income is missing** from the ACS load, so poverty and car access stand in for vulnerability.
+- **Google Maps dependency.** Neighbourhood names and the map need Google Maps; when it is unavailable the app falls back to ZIP codes.
+- **No MCP server.** The challenge suggests consuming a managed MCP server. We chose purpose-built Python tools
+  ([ADR-002](docs/adr/ADR-002-custom-prediction-tool-over-mcp-toolbox-sql.md)); a managed BigQuery MCP server could be added for ad-hoc
+  exploration.
+- **Latency.** Chat answers take about 11 to 19 seconds. Gemini 4 Argon was measured at a median of 9 to 23 seconds per call (and over 60
+  at the tail), so it is used only for proposals.
+- **Drafts need review.** Proposal text is grounded in the figures but is a draft for a person to check.
 
-### And one required differentiator: **BigQuery ML**
+**Extending beyond Dallas.** The pipeline is city-agnostic: load another Heat Watch campaign and its census tracts, run
+`scripts/build_areas.sh`, retrain the offset model, and change `HEAT_CITY`. Because tracts, ZIP areas and area names all come from
+nationwide public datasets, the same approach extends to every state; the work is data loading and model retraining per city, not new code.
 
-Each of the five challenges has one required technology that makes it distinct. Yours is
-BigQuery ML, and here's why it belongs in this problem rather than being bolted on.
+## 11. Repository layout
 
-Look back at the planner's questions. *"How often does this hit dangerous levels"* is history—a query answers it. But *"where should the cooling centers go"* is about places **nobody has
-measured**. Your data has temperature readings along the streets volunteers drove. It has
-nothing for the street they didn't.
+```text
+.
+├── README.md                    this file
+├── instructions_README.md       the organisers' challenge brief (the original README)
+├── agent/                       the application
+│   ├── heat_planner/
+│   │   ├── api.py               FastAPI app: REST, WebSocket, static UI
+│   │   ├── agent.py             root (router) agent
+│   │   ├── sub_agents.py        five specialist agents
+│   │   ├── prompts.py           instructions for every agent
+│   │   ├── tools/               prediction, siting, planting, community, history
+│   │   ├── tracks.py            the three tracks' decision logic and equity audit
+│   │   ├── modeling.py          BigQuery ML predictions for every tract
+│   │   ├── tracts.py            per-area data: predictions, demographics, names
+│   │   ├── areas.py             area names: BigQuery ZIPs plus Google Maps
+│   │   ├── forecast.py          National Weather Service forecast
+│   │   ├── live.py              Gemini Live speech-to-text proxy
+│   │   ├── proposal.py          draft proposals
+│   │   ├── mapdata.py           map points and the tract graph
+│   │   ├── service.py           one chat turn through the ADK runner
+│   │   ├── callbacks.py, context.py   step budget, tool trace, result cards
+│   │   └── bq.py, config.py     the only BigQuery entry point; settings
+│   ├── ui/static/               single-page UI (no build step)
+│   ├── tests/                   88 tests
+│   ├── Dockerfile, requirements.txt, run.sh, .env.example
+│   └── README.md                engineering notes
+├── notebooks/                   data load and exploration (Colab Enterprise)
+├── scripts/                     load.sh (data), build_areas.sh (tract to ZIP map)
+├── docs/                        ADRs, architecture notes, governance and audit records
+└── data/                        reference data notes
+```
 
-**To answer that, your agent needs a model that can predict heat risk for a location it has
-never seen.** You'll train one in BigQuery ML, and your agent must **call** that prediction
-through a tool—not query historical rows and describe them.
+## 12. Run, test and deploy
 
-Use `ML.EXPLAIN_PREDICT` rather than `ML.PREDICT`. It returns per-feature attributions alongside
-each prediction—not just "+6.2°F" but *"+4.1 from street density, +2.8 from building age,
-−0.7 from park proximity."* **That sentence is the answer to "why."** Teams that treat
-explanation as a reporting step at the end finish with a number and no argument.
+**Prerequisites:** Python 3.11, the `gcloud` CLI, a Google Cloud project with the `a4i_climate` dataset loaded, and these APIs enabled:
+BigQuery, Vertex AI, Cloud Run, Cloud Build, Artifact Registry, Maps JavaScript, Map Tiles, Places (New) and Geocoding.
 
----
+```bash
+# 1. data (once per project)
+bash scripts/load.sh               # defaults to dallas; or run notebooks/c1_01_load_explore.ipynb
+bash scripts/build_areas.sh        # tract-to-ZIP map
 
-## Getting started
+# 2. run locally
+cd agent
+cp .env.example .env               # set GOOGLE_CLOUD_PROJECT and GOOGLE_MAPS_API_KEY
+gcloud auth application-default login
+./run.sh                           # http://127.0.0.1:8080
 
-You have **4.5 hours** and there are **8–10 of you**. That is too many people for one keyboard,
-and the biggest risk to your team is the first hour disappearing into setup and coordination.
-Spend twenty minutes on Step 0. It pays for itself twice over.
+# 3. test
+.venv/bin/python -m pytest         # 88 tests, none call a live service
 
-### Step 0—Organize your team
+# 4. deploy to Cloud Run (builds the Dockerfile with Cloud Build)
+gcloud run deploy heat-planner --source . --region us-east1 \
+  --min-instances 1 \
+  --set-env-vars GOOGLE_CLOUD_PROJECT=<project>,GOOGLE_CLOUD_LOCATION=global,GOOGLE_MAPS_API_KEY=<restricted browser key>
+```
 
-**Pick a team lead.** One person who makes the call when you're behind—and you *will* be
-behind. Deciding in advance who says "we're cutting that" is worth more than it sounds. They
-don't have to be the best coder; they have to be willing to decide.
+The Cloud Run service account needs *BigQuery Job User*, *BigQuery Data Viewer* on the dataset, and *Vertex AI User*. Add
+`--allow-unauthenticated` only for a throwaway demo project.
 
-**Pick a repo owner.** Can be the same person. They create the team's repository and add
-everyone to it. Everything lands in that one repo—not eight forks.
+**Configuration** (environment variables, all optional except the project):
 
-**Everyone else: create a free [GitHub](https://github.com) account now** if you don't have one,
-and **send your username to the repo owner.** Do it while they're setting up. Two minutes, and
-it unblocks the whole team.
-
-**Agree your city, your track, and your scenario** (see above). Ten minutes, and it is the most
-valuable ten minutes of the day—everything downstream answers to it. Write it on something
-everyone can see.
-
-**Split into four lanes.** All four start immediately, in parallel.
-
-#### Data lane—2 to 3 people
-
-Running the notebook end to end takes a few minutes (Houston takes longest); reading it properly
-takes about forty, and that is the point. Running it is emphatically *not* the job. This lane owns
-everything between raw tables and a model the agent can call:
-
-- **Feature engineering**—this is the real work. The loaded tables aren't model-ready. You'll
-  join street readings to census tracts, compute the target (how much hotter is this spot than
-  the city average?), and derive features worth learning from.
-- **Train, evaluate, iterate.** Run `ML.EVALUATE`. Try feature sets. Hunt for leakage—if
-  accuracy looks spectacular, something is wrong.
-- **Hand the agent lane a working query.** They need the exact `ML.EXPLAIN_PREDICT` SQL their
-  tool will wrap. Getting that to them early unblocks them.
-- **The frequency analysis**—how often does this city cross dangerous thresholds, and is the
-  trend moving?
-- **The equity audit**—where did our recommendations actually land, and who lives there?
-  ([Explained below](#what-auditing-the-outcome-actually-means).)
-- **Decide with the team whether to bring extra data**, and if so, source it and check the license.
-
-#### Agent lane—2 to 3 people
-
-- **Prompt engineering.** Expect this to be the hardest part, and budget for it. Your system
-  instruction has to teach the agent who it's talking to, when to reach for which tool, what to
-  do with a vague question, and—importantly—**when to refuse.** An agent that confidently
-  answers something it has no data for is worse than one that says "I can't tell you that."
-- **At least one tool you built.** Required. The obvious one wraps your BQML prediction,
-  so the agent can ask about a location nobody measured.
-- **Decide what goes through MCP and what needs a custom tool.** Generic "query my tables" access
-  is a good fit for the managed MCP server. Anything with shape to it—a ranked siting query, an
-  explanation call—usually wants a purpose-built tool. **This is your main coordination point
-  with the data lane**: they own the SQL, you own the wrapper. Ask them for it early.
-- **Deploy early, not at the end.** Agent Runtime or Cloud Run. The front end lane is blocked on
-  a live endpoint, and deployment always takes longer than you think.
-- **Test with the real questions.** Take the seven planner questions above and actually ask them.
-  You'll find the gaps faster than by reasoning about them.
-- **Decide what failure looks like.** What does your agent say when the model has no prediction
-  for a location, or the planner asks about a city you didn't load? Judges notice this.
-
-#### Front end lane—2 people
-
-You have three routes. **Pick deliberately and be ready to say why**—the choice tells judges
-something about who you think the user is.
-
-| Option | Strength | Trade-off |
+| Variable | Default | Meaning |
 |---|---|---|
-| **`adk web`** | Free. Built in. Works the moment your agent does. **Everyone starts here.** | It is visibly a developer tool. Fine as a demo, weak as a product story. |
-| **Gemini Enterprise** | A polished interface with almost no front-end code. Free trial available, and an agent already deployed to Agent Runtime can be surfaced through it. | Serves **internal** users, not the public. |
-| **Custom web UI** | Full control. A map a council member could actually read beats a chat log. | The most work by far. Scope it small. |
+| `GOOGLE_CLOUD_PROJECT` | none | project with the dataset, model and Vertex AI |
+| `BQ_DATASET`, `BQML_MODEL` | `a4i_climate`, `offset_model` | where the data and model live |
+| `HEAT_CITY` | `Dallas` | city name used in prompts and searches |
+| `HEAT_AGENT_MODEL` | `gemini-3.8-flash` | chat answers |
+| `HEAT_ROUTER_MODEL` | `gemini-3.8-flash` | picks the specialist |
+| `HEAT_PROPOSAL_MODEL` | `gemini-4-argon` | drafts proposals |
+| `HEAT_LIVE_MODEL`, `HEAT_LIVE_LOCATION` | `gemini-live-2.5-flash-native-audio`, `us-central1` | speech to text |
+| `GOOGLE_CLOUD_LOCATION` | `global` | Vertex AI endpoint for the Gemini models |
+| `GOOGLE_MAPS_API_KEY` | none | browser key for the map |
+| `BQ_MAX_BYTES_BILLED`, `BQ_MAX_ROWS` | 1 GB, 500 | cost and size caps per query |
 
-**Every team starts on `adk web`**—that's not a choice, it's just what's in front of you. The
-real question is whether you *finish* there. Staying is a legitimate decision if you spent the
-time elsewhere and can say so. "It was already there" is the weakest available defense of it.
+## 13. API reference
 
-The Gemini Enterprise trade-off is worth thinking about rather than working around. It's built
-for people *inside* an organization—which, for a tool whose users are city planners and
-emergency management staff, is arguably exactly right. **Say that on purpose.** "We chose an
-internal-facing interface because our user is a city employee, not a resident" is a good answer.
-Discovering the limitation on stage is not.
-
-- **Do not wait for a working agent.** Mock the response, build against it, swap later. That is
-  precisely why deployment sits in the middle of the day rather than at the end.
-- **Whatever you build, the demo runs on it.** Test it on the machine you'll actually present
-  from, before you need it.
-
-#### Story lane—1 to 2 people, starting at minute zero
-
-Not "make slides at the end." This lane owns whether anyone understands what you built.
-
-**What you hand in.** Four things, uploaded to the submission portal at
-https://portal.angelhack.com/a4i-console before the deadline your facilitator gives you:
-
-1. your GitHub repo link
-2. your Google Skills project link (the Qwiklabs environment you built in)
-3. your pitch deck
-4. a **pitch video**: a screen-share walkthrough, one of you talking the judges through what you
-   built while running it
-
-**Judges score those four things after the event. Nobody comes to your table and there is no
-Q&A.** Every question in [How you'll be judged](#how-youll-be-judged) has to be answered in the
-deck or the video, or it counts as unanswered.
-
-**What you're preparing: a short pitch deck, a quick demo, and the recording of it.** Presentation
-time at this event
-is tight—your facilitator will give you the exact number, but plan for short. That constraint
-should shape everything this lane does. **A crisp pitch with one moment that lands beats a
-thorough walkthrough nobody has time to hear.**
-
-- **The pitch deck.** Short. The problem, your city's scenario, what your agent does, what you
-  found, what you'd do next. Front-load it—assume you get cut off before your last slide.
-- **The demo.** Pick the one or two questions that best show what your agent can do, and
-  **rehearse them.** A quick demo that works beats an ambitious one that stalls. Have a
-  screenshot ready in case the live version misbehaves.
-  Once it works, **record it as your pitch video**: a screen-share with one of you narrating. That
-  recording, not the live demo, is what the judges watch.
-- **The Placement Recommendation**—your output artifact (see below). Something a planner would
-  actually receive, not a console dump. This can carry the detail the deck has no time for.
-- **The honest limitations.** Judges explicitly reward this, and one line in the deck is enough.
-
-Time the whole thing out loud at least once before you present. Teams almost always run long.
-
-### Your output artifact: the Placement Recommendation
-
-Whatever else your agent does, it should be able to produce this—a ranked list of locations,
-each carrying coordinates specific enough to stand on, the predicted heat risk, **why** (which
-factors drove it and by how much), who lives there, and a drafted proposal a planner could take
-to a council meeting.
-
-### Step 1—Create the team repository
-
-**Repo owner only.**
-
-1. At the top of this page, click the green **Use this template** button → **Create a new
-   repository**. *(No button? Use **Fork** and tell a coach.)*
-2. Name it after your team, choose **Public**, click **Create repository**.
-3. **Settings → Collaborators** → add every teammate's GitHub username.
-4. Paste the repo URL where everyone can see it.
-
-### Step 2—Get into your Google Cloud project
-
-**Your facilitator will tell you how to access your project. Follow those instructions**—they
-vary by venue and they're the fastest path.
-
-**There is one project per team.** You all share it, which is the point—you can all see the
-same BigQuery tables. It also means you can overwrite each other. Agree on who creates what.
-
-You have Owner. You don't need to create a project, set up billing, or download a key file.
-
-### Step 3—Everyone: get into Cloud Shell
-
-**Cloud Shell is where you'll work.** It has `gcloud`, `bq`, Python, Node, git, Docker, and the
-Antigravity CLI already installed. Nothing to set up on your laptop, and no admin rights needed.
-(The Antigravity IDE launches from a button in your Skills lab environment; see below.)
-
-1. In the Google Cloud console—the one your facilitator just got you into—click the
-   **terminal icon (`>_`) in the top right**. Use that icon rather than a bookmark or a typed
-   address: it opens Cloud Shell attached to *this* project, in *this* browser session. Typing a
-   URL can land you in a different window signed in as a different account, which is a confusing
-   twenty minutes nobody needs.
-
-2. Clone your team's repository and move into it:
-
-   ```bash
-   git clone https://github.com/YOUR-TEAM/YOUR-REPO.git
-   cd YOUR-REPO
-   ```
-
-3. Open the whole repo in the editor:
-
-   ```bash
-   cloudshell workspace .
-   ```
-
-   That opens your cloned folder as a workspace in the Cloud Shell Editor—the same thing as
-   **File → Open Folder** in VS Code, which is essentially what the editor is. You get a file
-   tree, a real editor, and a terminal in the same browser tab.
-
-#### One repo, one branch per lane
-
-Eight to ten people committing to `main` will collide, and merge conflicts at minute 200 are a
-genuinely bad way to lose a demo. Nobody needs their own fork—just take a branch:
-
-```bash
-git checkout -b data        # or agent, frontend, story
-```
-
-Work on your lane's branch. Merge into `main` when you have something the other lanes need—the data lane's `ML.EXPLAIN_PREDICT` query is the obvious example, and the agent lane is blocked
-until they get it. Merging early and often beats one heroic merge at the end.
-
-New to any of this? Both guides open in a new tab:
-[Using Cloud Shell](https://docs.cloud.google.com/shell/docs/using-cloud-shell)
-·
-[Cloud Shell Editor overview](https://docs.cloud.google.com/shell/docs/editor-overview)
-
-One thing worth knowing: your `$HOME` directory persists between sessions. Anything outside it
-does not—so keep your work in the cloned repo.
-
-#### Strongly recommended: Antigravity, the IDE and the CLI
-
-Antigravity is Google's agentic coding environment, and **it is already set up for you in two
-forms**. Neither is a requirement, and nothing in this challenge depends on either—so don't lose
-time fighting one if it isn't helping. But we strongly recommend you use at least one, because every
-lane has tedious work it will happily absorb, and the fastest teams at events like this are the ones
-that let a coding agent do the typing while they do the thinking.
-
-**The Antigravity IDE.** Your Google Skills lab environment includes a button that launches it. A
-full editor with an agent in it: it reads your repo, proposes edits you review before accepting,
-runs code in the terminal, and can drive a browser. If you'd normally open an editor, open this one.
-
-**The Antigravity CLI (`agy`).** Already installed in Cloud Shell. You run zero setup commands—just
-type it:
-
-```bash
-agy
-```
-
-Then talk to it in plain language. Places it tends to earn its keep in a hackathon:
-
-- **Agent lane**—scaffolding ADK boilerplate, wiring a custom tool around a query, drafting a
-  Cloud Run deploy. The tedious parts you already know how to do.
-- **Data lane**—drafting BigQuery SQL against tables you just loaded, or restructuring a query
-  you've already written.
-- **Anyone, stuck**—paste an error and ask what's wrong. Faster than a search, and it can see
-  your actual code.
-
-A couple of built-ins worth knowing: `/diff` shows you pending changes before you accept them,
-and `/permissions` controls what it's allowed to do on its own. Review before you accept—it's
-fast, which is exactly why it's worth reading what it did.
-
-[Antigravity: getting started](https://antigravity.google/docs/getting-started)
-·
-[IDE overview](https://antigravity.google/docs/ide/overview/)
-·
-[CLI install and auth](https://antigravity.google/docs/cli/install)
-·
-[CLI hands-on codelab](https://codelabs.developers.google.com/antigravity-cli-hands-on)
-
-### Step 4—Load the data
-
-**Data lane's job.** One person runs it; nobody else waits.
-
-1. In the Google Cloud console, search for **Colab Enterprise** and open it.
-2. **You'll be asked to enable some APIs. Say yes.** Then the Colab Enterprise home page shows
-   *another* **Enable APIs** button at the top. Click that too. Two prompts is expected—it
-   isn't an error and you haven't done anything wrong.
-3. **My Notebooks** → **Import** → source **URL**, and paste this:
-
-   ```
-   https://raw.githubusercontent.com/haggman/A4I2026-challenge-1-walkability/main/notebooks/c1_01_load_explore.ipynb
-   ```
-
-   *(If your team modifies the notebook later, get your own copy's raw URL by opening the file
-   on GitHub and clicking **Raw**.)*
-
-4. Click **Import**, open the notebook, set `CITY` at the top, and run the cells top to bottom.
-
-Running it end to end takes a few minutes (Houston takes longest). Reading it properly takes
-about forty, and that is the point. **Read the text between the cells**—it explains why each step
-happens, and several explanations will save you time later. The notebook ends by validating
-everything and telling you plainly whether anything is wrong.
-
-**If the notebook won't run**, or a federal data server starts refusing the room (150 people
-hitting one endpoint in ten minutes looks like an attack to some of them), there's a headless
-fallback. The snapshot already has everything the notebook pulls. From the root of your cloned
-repo in Cloud Shell:
-
-```bash
-bash scripts/load.sh dallas
-```
-
-```bash
-bash scripts/load.sh --list       # every city we've published
-```
-
-Invoke it with `bash` rather than `./scripts/load.sh`—that way it doesn't matter whether the
-file arrived with its executable bit set, which depends on how your repo was created.
-
-It's safe to run more than once. Every table is fully replaced rather than appended to, so if
-you cancel it halfway through, or you're not sure whether it finished, just run it again.
-
-### What you'll have
-
-Three tables in your project, in a dataset called `a4i_climate`:
-
-| Table | What it is |
+| Endpoint | Purpose |
 |---|---|
-| `heat_observations` | Street-level temperature readings across your city—tens of thousands of points |
-| `station_daily_temps` | Seven years of daily maximums from weather stations near the city |
-| `tract_demographics` | Population, age, income, and vehicle access by census tract |
+| `POST /api/chat` | One chat turn: `{question, track, history}` returns the answer, result cards and follow-ups |
+| `GET /api/tracks` | The three tracks' problem statements and the dispatch focuses |
+| `GET /api/today` | Ranked dispatch areas (`focus`, `limit`) with the equity audit |
+| `GET /api/fleet` | Fleet plan: how many of `units` trucks (or teams, or sites) go to each area |
+| `GET /api/budget` | The three cooling centers (`radius_km`, optional `cost_per_center`), coverage curve and heat days |
+| `GET /api/trees` | Ranked planting areas with the equity audit |
+| `POST /api/proposal` | Drafts a dispatch brief, council proposal or planting brief from the figures |
+| `GET /api/areas` | Neighbourhoods that have measured data |
+| `GET /api/map/points`, `/api/map/tracts`, `/api/map/config` | Map data: readings, per-area predictions, the Maps key |
+| `GET /api/graph` | The tract graph (areas linked to heat, poverty, car-access and age groups) |
+| `GET /api/forecast`, `/api/history` | NWS forecast; days a year at or above a temperature |
+| `WS /api/live` | Voice: 16 kHz audio in, transcript out (same-origin only) |
+| `GET /api/health` | `{"ok": true}` |
 
----
+## 14. Credits and licence
 
-## The data, and why we chose it
-
-**NOAA Heat Watch** is the backbone. Volunteers drive instrumented cars along fixed routes
-through a city on one hot day, logging temperature roughly once per second. It's the only public
-dataset that resolves temperature differences *within* a city rather than between cities.
-
-The others fill gaps: **GHCN-Daily** for how often the city gets hot and **ACS** for who is
-exposed. **EPA Smart Location** (built environment) is not loaded for you; the notebook's
-Section 11 tells you where to get it. All public domain or CC0. Full detail is in the notebook.
-
-**One thing we deliberately excluded, and you should know why.** Vulnerability indices like the
-NYC Heat Vulnerability Index and CDC's Social Vulnerability Index include race as a direct input
-variable. We left those columns out.
-
-Race genuinely correlates with urban heat exposure—that's well established, and formerly
-redlined neighborhoods run measurably hotter today. But the *cause* is the physical environment:
-pavement, building density, missing tree cover. Those we can measure directly, and they're in
-your data. Race is a cruder measurement of something we already have.
-
-**Removing the column does not make your model unbiased.** Every proxy is still there. Which is
-why the answer isn't deletion, it's checking: when you have your ranked recommendations, look at
-whose neighborhoods they landed in—as an audit of your output, never as a model input. If your
-recommendations systematically miss the most vulnerable areas, that's a finding, and it's worth
-more in a demo than another point of accuracy.
-
-**Strip the variable. Audit the outcome. Say you did both.**
-
-### What "auditing the outcome" actually means
-
-We keep saying this, so here is exactly what it is. It's three steps and about twenty minutes.
-
-1. **Produce your recommendations.** Say your agent's top ten sites.
-2. **Look up who lives there.** Find the census tract each site falls in, and pull its
-   demographics from `tract_demographics`—median income, poverty rate, share of households
-   without a car, median age.
-3. **Compare that to the city as a whole.** Are your recommended tracts poorer than the city
-   average, or richer? Older or younger? More or less likely to be without a vehicle?
-
-Then say the answer out loud: **did our recommendations land in the neighborhoods that need
-them most, or in the ones that happened to be easiest to model?**
-
-Both answers are worth having. If your sites skew toward high-poverty, low-vehicle-access,
-older-resident tracts, you have evidence your model is finding real vulnerability—say so, with
-the numbers. If they skew the other way, you've found something more interesting: your features
-may be capturing where it's *hot* without capturing where heat *hurts*. That's a genuine finding
-about your own work, and presenting it honestly will land better with judges than a slide
-claiming everything worked.
-
-This is also where race belongs, and only here. You can compare the racial composition of your
-recommended tracts against the city—as a **check on your output**, after the fact. That's a
-completely different act from feeding race into the model, and it's the one that actually tells
-you something.
-
----
-
-## Going further
-
-You have the core. These are the moves that separate a working demo from something a
-judge remembers.
-
-### What will set yours apart
-
-Every team building Challenge 1 gets the same data, the same model type, and the same starting
-notebook. **The core is not where you win.** Whichever track you picked, these are the levers:
-
-- **Go deeper on one question** rather than shallow on seven. An agent that handles its track's
-  central question superbly beats one that half-answers everything.
-- **Bring a dataset nobody else has.** Your city's tree canopy, its existing cooling centers, 311
-  heat complaints. See [Bringing your own data](#bringing-your-own-data) for what would unlock
-  what, and check the license first.
-- **Make the equity audit the centerpiece** instead of a footnote—checking whether your
-  recommendations actually reached the neighborhoods that need them most. It's the most
-  interesting conversation available in this challenge and most teams will skip it.
-  ([What that means, concretely](#what-auditing-the-outcome-actually-means).) It lands hardest on
-  the decade track, where the question becomes whether your plan reverses a century of
-  disinvestment or repeats it.
-- **Give it a memorable face**—a map a council member could read, not a JSON blob.
-
-Read [how you'll be judged](#how-youll-be-judged) *before* you decide. It's at the bottom, it
-takes two minutes, and it will change what you build.
-
----
-
-## Bringing your own data
-
-**You're not limited to what we provide.** Thoughtful sourcing is exactly the judgment this
-challenge rewards, and judges are looking for it. This is a natural second job for the data lane
-once the model is training.
-
-### What would unlock what
-
-Our data uses **coordinates, not street names**, and **straight-line distance, not walking
-routes**. That's not a flaw to work around so much as a list of things a team can go and fix—and closing one of these is precisely the kind of move that separates a demo.
-
-| What you can't currently ask | What would unlock it | Matters most to |
-|---|---|---|
-| *"What's at 63rd and Halsted?"*—talking in street names | Google Maps geocoding | every track |
-| *"Who's within a **10-minute walk**?"*—real walking distance | Google Maps routing / isochrones | Today, This budget cycle |
-| *"Can people get there on transit?"* | Your city's GTFS feed | Today |
-| *"Show me Ward 5"*—political boundaries | Your city's open data portal | This budget cycle |
-| *"How much canopy is there now?"* | Your city's tree inventory—NYC's is already in BigQuery at `bigquery-public-data.new_york_trees.tree_census_2015` | This decade |
-| *"Which blocks are mostly pavement?"* | An impervious-surface layer, if your city publishes one | This decade |
-| *"Where do people go when it's dangerously cold?"* | NOAA GHCN-Daily minimums and snow depth, plus your city's warming-center list | a cold-snap track of your own |
-| *"Which underpasses flood?"* | Your city's stormwater or 311 flooding reports; FEMA flood layers | a storm track of your own |
-| *"Who has nowhere indoors to go?"* | Your city's public facility list—libraries, rec centers, senior centers, with hours | indoor cooling access |
-
-One distinction worth getting right: we give you `no_vehicle_rate` per census tract, which tells
-you *who lacks a car*. That's the right input for "if the nearest center is two miles away, who
-can't reach it?" It is **not** a walk-time isochrone. Know which one you used, and say so.
-
-**Augment, don't replace.** Get the core working on the provided data *first*. "Let's find better
-data" is one of the most reliable ways to lose ninety minutes and have nothing to demo.
-
-**Check the license before you load it.** This is a publicly branded event and winning projects
-get promoted. Anything you bring has to clear the same bar we applied to ourselves:
-
-| | |
-|---|---|
-| ❌ No **NonCommercial** (NC) | Winners are promoted commercially |
-| ❌ No **NoDerivatives** (ND) | Building on the data is the whole point |
-| ❌ No **share-alike** (ODbL, CC BY-SA) | It would encumber what *you* build |
-| ❌ No **individual-level personal data** | Aggregate public statistics only |
-| ❌ No **unstated license** | No license means no rights granted |
-| ✅ Public domain, CC0, US Government works | Safe |
-
-The trap most likely to catch you: **anything derived from OpenStreetMap is ODbL**, which is
-share-alike—and OSM is the first thing most people reach for on a walkability problem. If
-you're unsure, ask a coach. Thirty seconds of checking beats finding out later.
-
----
-
-## What's in this repository
-
-```
-notebooks/c1_01_load_explore.ipynb   The main artifact. Run this first.
-notebooks/c1_90_publish_snapshot.ipynb  ROI maintainers only. You do not need it.
-scripts/load.sh                   Headless fallback if Colab is unavailable.
-data/                             A short README. Seed data, if any.
-agent/                            A one-page README. Your agent goes here.
-```
-
-`c1_90_publish_snapshot.ipynb` is for ROI maintainers: it regenerates the Cloud Storage snapshot
-that `scripts/load.sh` reads from. If you run it you will get a permissions error, because you do not
-have write access to our bucket. That is expected, and you never need it.
-
-`agent/` is empty on purpose. We built the on-ramp—data, loading, validation, sample queries.
-We didn't build the vehicle. The design decisions in your agent are what you'll be judged on.
-
----
-
-## How you'll be judged
-
-**"Finished" is not the goalpost.** Almost nobody completes everything they set out to do in
-4.5 hours—that's the design, not a failure. A team that gets three quarters of the way with
-clear reasoning and honest limitations will beat a team that demos something polished and hollow.
-
-**You're judged against the track you chose**, not against a fixed idea of the right answer. A
-decade-track team is expected to hand over a planting *program* at neighborhood scale; a
-Today-track team is expected to hand over something a dispatcher could work this afternoon.
-Neither is marked down for not looking like the other. Say which track you took, early.
-
-**Judges score your submission, not a conversation.** They work from your repo, your Skills
-project, your deck and your pitch video, after the event, with no follow-up questions. The
-questions below are what they are looking for; put the answers in the deck or the video, in those
-words, rather than waiting to be asked.
-
-| Dimension | Weight | The question judges are asking |
-|---|---:|---|
-| **Impact & insight** | 30 | Would your user actually use this? Is the answer specific enough for *them* to act on? |
-| **Technical execution** | 30 | Does it work, and is the required stack genuinely used rather than name-checked? |
-| **Rigor & judgment** | 25 | Can you defend the decisions you made along the way? |
-| **Craft & communication** | 15 | Does the short pitch land, does the quick demo work, and can you justify your interface choice? |
-| **Bonus—range** | **+10** | Technology breadth and ambition that *serves* the solution |
-
-Bonus sits **on top** of the 100, so ambition can't cannibalize the core. Nail the fundamentals
-and add nothing, and you can still win. Wire up five services with no coherent recommendation,
-and you can't win on breadth alone.
-
-### What "Rigor and judgment" actually means
-
-This is the one teams under-invest in, because it's least visible in a demo. It's a quarter of
-your score and the easiest place to stand out. Four concrete things:
-
-**Data decisions you can defend.** If you brought your own dataset, do you know its license? Why
-that source and not another? Did you check whether columns were the types you assumed?
-
-**Validation.** Did you check your tables before modeling, or assume no error meant no problem?
-The notebook ships a validation section—using it, and saying what it told you, counts.
-
-**Bias handling.** Did you keep race out of your model inputs, and did you run the
-[equity audit](#what-auditing-the-outcome-actually-means) on your output? Say what it found in the
-deck or the video, with the numbers rather than the intention.
-
-**Knowing what your model can't do.** The heat data is a single day. The campaigns were driven by
-volunteers. The stations are sparse. A team that volunteers its limitations shows more skill than
-one that oversells—and judges are told to reward it.
-
-One warning worth internalizing: **a model with 98% accuracy on this problem is almost certainly
-broken**, not brilliant. It usually means the features contain the answer. If your model can't be
-wrong, it isn't predicting anything.
-
-And a general note, because this challenge asks you to choose more than it asks you to follow
-instructions—which city, which track, which interface, what to cut when you're behind. **None
-of those have a single right answer and judges are not checking them against a key.** They're
-asking whether you chose on purpose and can say why. "We picked Gemini Enterprise because our
-user is a city employee" is a strong answer; "we used `adk web` because it was there" is a weaker
-one for the same work.
-
----
-
-## Getting help
-
-Ask your table captain first. Every table has one: not a judge, a consultant who sits with you
-for the day. Then the ROI facilitator on the floor, and the event's Discord channel, which the
-organizers use for direct questions during the day. Whatever you're stuck on has probably already
-been solved at another table.
-
-To report a problem with the data or the notebook, run the **diagnostic cell** at the bottom of
-the notebook and share what it prints. One block, everything a coach needs, beats a screenshot
-every time.
-
----
-
-## Repo governance
-
-This repo's `agent/` implementation is governed by `CLAUDE.md` (Claude Code's entry point) and
-`.claude/rules/`, `.claude/skills/`, `.claude/agents/`. See
-[docs/training/ai-assisted-dev-guide.md](docs/training/ai-assisted-dev-guide.md) for how this
-team uses AI coding tools here, and
-[docs/architecture/codebase-walkthrough.html](docs/architecture/codebase-walkthrough.html) for
-an interactive architecture walkthrough.
+- **Data:** NOAA and CAPA Strategies (Heat Watch, CC0); NOAA GHCN-Daily; US Census Bureau (ACS and ZIP boundaries); National Weather
+  Service (forecast); neighbourhood names and map tiles from Google Maps Platform.
+- **Challenge materials:** Agents for Impact 2026 (see [`NOTICE`](NOTICE)).
+- **Licence:** Apache License 2.0, see [`LICENSE`](LICENSE).
