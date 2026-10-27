@@ -792,3 +792,14 @@ been solved at another table.
 To report a problem with the data or the notebook, run the **diagnostic cell** at the bottom of
 the notebook and share what it prints. One block, everything a coach needs, beats a screenshot
 every time.
+
+---
+
+## Repo governance
+
+This repo's `agent/` implementation is governed by `CLAUDE.md` (Claude Code's entry point) and
+`.claude/rules/`, `.claude/skills/`, `.claude/agents/`. See
+[docs/training/ai-assisted-dev-guide.md](docs/training/ai-assisted-dev-guide.md) for how this
+team uses AI coding tools here, and
+[docs/architecture/codebase-walkthrough.html](docs/architecture/codebase-walkthrough.html) for
+an interactive architecture walkthrough.

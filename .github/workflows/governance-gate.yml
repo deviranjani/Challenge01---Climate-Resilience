@@ -1,0 +1,13 @@
+name: Governance Gate
+# Non-blocking by design: reports coe-tier-rubric.yml gate results on every PR without
+# requiring branch protection to enforce them. The check logic lives in the reusable
+# workflow owned by one-thd/ai-governance, not inlined here, so fixing it later means
+# editing one file, not every bootstrapped repo. See orange-lens-ai-bootstrapper's
+# developer-experience skill for the full rationale (CUS6-281 audit).
+on:
+  pull_request: {}
+permissions:
+  contents: read
+jobs:
+  gate:
+    uses: one-thd/ai-governance/.github/workflows/governance-gate-reusable.yml@main

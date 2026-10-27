@@ -1,0 +1,9 @@
+installed_version: null
+current_version: "3.4.1"
+version_source: "none found — no project.instructions.md, no .claude/rules/ files, no docs/training/ai-assisted-dev-guide.md, no bootstrap-runs/ directory prior to this run"
+run_mode: first-run
+upgrade_confirmed: not_required
+notes: >
+  No version stamps found anywhere in the target repo. Skipped the What's New education
+  block per version-detection skill Step 2 ("No version stamps found anywhere | First run —
+  skip education block, go straight to Phase 1") and proceeded directly to Phase 1.

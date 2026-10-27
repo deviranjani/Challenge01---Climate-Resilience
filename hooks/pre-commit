@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Pre-commit hook: block an accidental .env commit and run gitleaks if installed.
+# Install: make install-hooks (copies this to .git/hooks/pre-commit)
+set -euo pipefail
+
+if git diff --cached --name-only | grep -qE '(^|/)\.env$'; then
+  echo "ERROR: a .env file is staged for commit. Remove it: git restore --staged <file>" >&2
+  exit 1
+fi
+
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact --no-banner
+else
+  echo "note: gitleaks not installed locally — relying on CI's .github/workflows/secret-scan.yml for this check" >&2
+fi
