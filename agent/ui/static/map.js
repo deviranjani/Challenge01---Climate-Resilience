@@ -12,7 +12,7 @@
     { featureType: "water", elementType: "geometry", stylers: [{ color: "#071226" }] },
   ];
   const TRACK_RGB = { today: [34, 211, 238], budget: [124, 92, 255], trees: [52, 211, 153] };
-  const map = { gmap: null, overlay: null, traffic: null, m3d: null, base: "roadmap", show: { heat: true, tracts: true, traffic: false, trucks: true }, now: 0, raf: 0, selected: null, area: null, sites: [], radiusKm: 0, started: false, fit: true };
+  const map = { gmap: null, overlay: null, traffic: null, m3d: null, base: "roadmap", show: { heat: true, tracts: true, traffic: false }, selected: null, area: null, sites: [], radiusKm: 0, started: false, fit: true };
 
   const isDark = () => (document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")) === "dark";
   const message = (text, bad) => { const el = $("#mapMsg"); el.textContent = text || ""; el.hidden = !text; el.className = "overlay-msg" + (bad ? " err" : ""); };
@@ -20,40 +20,6 @@
     const pts = state.points.length ? state.points : state.tracts.map((t) => ({ lat: t.lat, lon: t.lon }));
     return pts.length ? { lat: pts.reduce((a, p) => a + p.lat, 0) / pts.length, lon: pts.reduce((a, p) => a + p.lon, 0) / pts.length } : { lat: 32.78, lon: -96.8 };
   };
-
-  // ---------------------------------------------------------------- animated hydration trucks (illustrative)
-  const LOOP_S = 8, DRIVE = 0.7, MAX_TRUCKS = 5;
-  // A water truck: cyan tank with a droplet, violet cab, white outline. Drawn twice (facing right and left) so it never drives upside down.
-  const TRUCK = '<g id="t"><rect x="4" y="8" width="54" height="36" rx="6" fill="#22d3ee" stroke="#fff" stroke-width="3"/><path d="M31 15c5 7 9 11 9 16a9 9 0 0 1-18 0c0-5 4-9 9-16z" fill="#fff"/><path d="M58 20h19l13 13v11H58z" fill="#7c5cff" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><path d="M66 25h9l7 8H66z" fill="#e0f2fe"/><circle cx="24" cy="48" r="8" fill="#0b1220" stroke="#fff" stroke-width="3"/><circle cx="74" cy="48" r="8" fill="#0b1220" stroke="#fff" stroke-width="3"/></g>';
-  const ATLAS = "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="192" height="60" viewBox="0 0 192 60"><use href="#t"/><defs>${TRUCK}</defs><g transform="translate(192,0) scale(-1,1)"><use href="#t"/></g></svg>`);
-  const ICONS = { right: { x: 0, y: 0, width: 96, height: 60, anchorX: 48, anchorY: 30 }, left: { x: 96, y: 0, width: 96, height: 60, anchorX: 48, anchorY: 30 } };
-  const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
-  const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-
-  function trucks(now) {
-    const { PathLayer, TextLayer, ScatterplotLayer, IconLayer } = deck, c = center(), depot = [c.lon, c.lat];
-    const stops = map.sites.slice(0, MAX_TRUCKS), rows = stops.map((s, i) => {
-      const phase = ((now / 1000 + i * 1.3) % LOOP_S) / LOOP_S, drive = Math.min(phase / DRIVE, 1), dest = [s.lon, s.lat];
-      const dx = (dest[0] - depot[0]) * Math.cos((depot[1] * Math.PI) / 180), dy = dest[1] - depot[1], theta = (Math.atan2(dy, dx) * 180) / Math.PI;
-      return { dest, pos: lerp(depot, dest, ease(drive)), arrived: drive >= 1, pulse: (phase - DRIVE) / (1 - DRIVE), rank: s.rank, icon: dx >= 0 ? "right" : "left", angle: dx >= 0 ? theta : theta - 180 * Math.sign(theta || 1) };
-    });
-    return [
-      new PathLayer({ id: "truck-trail", data: rows, getPath: (d) => [depot, d.pos], getColor: [34, 211, 238, 150], getWidth: 3, widthUnits: "pixels", capRounded: true }),
-      new ScatterplotLayer({ id: "truck-arrival", data: rows.filter((d) => d.arrived), getPosition: (d) => d.dest, getRadius: (d) => 450 + d.pulse * 900, radiusUnits: "meters", stroked: true, filled: false, getLineColor: (d) => [34, 211, 238, Math.round(220 * (1 - d.pulse))], getLineWidth: 3, lineWidthUnits: "pixels" }),
-      new ScatterplotLayer({ id: "depot", data: [{ p: depot }], getPosition: (d) => d.p, getRadius: 260, radiusUnits: "meters", getFillColor: [124, 92, 255, 255], getLineColor: [255, 255, 255, 255], stroked: true, getLineWidth: 2, lineWidthUnits: "pixels" }),
-      new TextLayer({ id: "depot-label", data: [{ p: depot }], getPosition: (d) => d.p, getText: () => "Depot (illustrative)", getSize: 12, getColor: [255, 255, 255, 235], fontFamily: "Inter, sans-serif", fontWeight: 600, outlineWidth: 2, outlineColor: [11, 18, 32, 255], getPixelOffset: [0, 18], billboard: true }),
-      new IconLayer({ id: "trucks", data: rows, iconAtlas: ATLAS, iconMapping: ICONS, getIcon: (d) => d.icon, getPosition: (d) => d.pos, getSize: 40, getAngle: (d) => d.angle, sizeUnits: "pixels", billboard: true }),
-    ];
-  }
-
-  const animating = () => map.show.trucks && state.track === "today" && map.sites.length && map.overlay && !document.hidden;
-  function tick(ts) {
-    map.raf = 0;
-    if (!animating()) { refresh(); return; }
-    if (ts - (map.now || 0) > 33) { map.now = ts; refresh(); }
-    map.raf = requestAnimationFrame(tick);
-  }
-  function syncAnimation() { if (animating() && !map.raf) map.raf = requestAnimationFrame(tick); }
 
   // ---------------------------------------------------------------- deck.gl layers
   function layers() {
@@ -78,7 +44,6 @@
       list.push(new TextLayer({ id: "site-rank", data: map.sites, getPosition: (d) => [d.lon, d.lat], getText: (d) => String(d.rank), getSize: 15, getColor: [255, 255, 255, 255], fontFamily: "Inter, sans-serif", fontWeight: 700, outlineWidth: 2, outlineColor: [11, 18, 32, 255], billboard: true }));
     }
     if (map.selected) list.push(new ScatterplotLayer({ id: "selection", data: [map.selected], getPosition: (d) => [d.lon, d.lat], getRadius: 520, radiusUnits: "meters", stroked: true, filled: false, getLineColor: [255, 255, 255, 255], getLineWidth: 2, lineWidthUnits: "pixels" }));
-    if (animating()) list.push(...trucks(map.now || performance.now()));
     return list;
   }
   const refresh = () => map.overlay && map.overlay.setProps({ layers: layers() });
@@ -199,32 +164,28 @@
       map.overlay.setMap(map.gmap);
       message("");
       fitSites();
-      syncAnimation();  // the dispatch list usually arrives before the map is ready, so start the trucks now
     } catch (e) { map.started = false; message(e.message, true); }
   }
 
   function init() {
-    const trucksBox = $("[data-layer=trucks]"); if (trucksBox) trucksBox.checked = map.show.trucks;
     $$("[data-layer]").forEach((box) => box.addEventListener("change", () => {
       map.show[box.dataset.layer] = box.checked;
-      if (box.dataset.layer === "trucks") { syncAnimation(); refresh(); return; }
       if (box.dataset.layer === "traffic") { if (map.traffic) map.traffic.setMap(box.checked ? map.gmap : null); } else refresh();
     }));
     $$("#baseSeg button").forEach((b) => b.addEventListener("click", () => applyBase(b.dataset.base)));
     bus.on("place", onPlace);
     bus.on("area", onArea);
     bus.on("scenario", refresh);
-    document.addEventListener("visibilitychange", syncAnimation);
     bus.on("track", () => {
       map.sites = []; map.radiusKm = 0; map.area = null; map.selected = null; map.fit = true; $("#placeCard").hidden = true;
       if (state.track !== "today" && map.show.traffic) { map.show.traffic = false; $("[data-layer=traffic]").checked = false; if (map.traffic) map.traffic.setMap(null); }
-      refresh(); syncAnimation();
+      refresh();
     });
     bus.on("decision", ({ track, result }) => {
       if (track !== state.track) return;
       map.sites = result.sites || result.centers || [];
       map.radiusKm = track === "budget" ? result.radius_km : 0;
-      refresh(); fitSites(); syncAnimation();
+      refresh(); fitSites();
       if (map.base === "3d") open3d();
     });
     bus.on("theme", () => { if (map.gmap && map.base === "roadmap") map.gmap.setOptions({ styles: isDark() ? DARK_STYLE : null }); });
