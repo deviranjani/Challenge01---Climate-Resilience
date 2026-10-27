@@ -126,3 +126,17 @@ def test_proposal_failure_is_a_plain_503(client, monkeypatch):
     monkeypatch.setattr(proposal, "make_client", boom)
     res = client.post("/api/proposal", json={"track": "trees"})
     assert res.status_code == 503 and "quota" not in res.text
+
+
+def test_proposals_use_the_proposal_model_not_the_chat_model(monkeypatch):
+    seen = {}
+
+    class Spy(FakeGenai):
+        def generate_content(self, model, contents, config):
+            seen["model"] = model
+            return super().generate_content(model, contents, config)
+
+    monkeypatch.setenv("HEAT_AGENT_MODEL", "gemini-3.8-flash")
+    monkeypatch.setenv("HEAT_PROPOSAL_MODEL", "gemini-4-argon")
+    proposal.draft("trees", {"status": "ok", "sites": []}, client=Spy())
+    assert seen["model"] == "gemini-4-argon"

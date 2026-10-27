@@ -21,6 +21,7 @@ class Settings:
     bqml_type: str
     llm_model: str
     router_model: str
+    proposal_model: str
     live_model: str
     nws_user_agent: str
     thinking_level: str
@@ -37,8 +38,10 @@ def load_settings() -> Settings:
         dataset=os.environ.get("BQ_DATASET", "a4i_climate"),
         model_name=os.environ.get("BQML_MODEL", "offset_model"),
         bqml_type=os.environ.get("BQML_MODEL_TYPE", "Linear regression (BigQuery ML LINEAR_REG)"),
-        llm_model=os.environ.get("HEAT_AGENT_MODEL", "gemini-4-argon"),
-        # The root agent only picks a specialist, so a fast model keeps chat responsive (Argon takes 25-45s per call).
+        # Chat answers use a fast model: gemini-4-argon took a median of 9-23 s per call and sometimes over 60 s.
+        llm_model=os.environ.get("HEAT_AGENT_MODEL", "gemini-3.8-flash"),
+        # Drafting a proposal is a one-off writing task where a longer wait is fine, so it keeps the stronger model.
+        proposal_model=os.environ.get("HEAT_PROPOSAL_MODEL", "gemini-4-argon"),
         router_model=os.environ.get("HEAT_ROUTER_MODEL", "gemini-3.8-flash"),
         # gemini-4-argon thinks for over a minute by default; LOW answers in a few seconds. Empty turns it off.
         thinking_level=os.environ.get("HEAT_THINKING_LEVEL", "LOW"),

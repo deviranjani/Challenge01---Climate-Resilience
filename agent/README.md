@@ -73,13 +73,14 @@ in this README and in the pitch deck, not in the product.
 
 | Use | Model | Location |
 |---|---|---|
-| Specialist agents (answers) | `gemini-4-argon`, thinking level LOW | `global` |
+| Specialist agents (chat answers) | `gemini-3.8-flash` (`HEAT_AGENT_MODEL`) | `global` |
+| Draft proposals | `gemini-4-argon`, thinking level LOW (`HEAT_PROPOSAL_MODEL`) | `global` |
 | Root agent (routing) | `gemini-3.8-flash` | `global` |
 | Speech to text | `gemini-live-2.5-flash-native-audio` | `us-central1` |
 
-`gemini-4-argon` is slow by default (over a minute for a trivial prompt) because of its long default thinking;
-`LOW` brings that to seconds, but calls still vary from about 4 to 60 s. Set `HEAT_AGENT_MODEL` or
-`HEAT_ROUTER_MODEL` to change either. Only tracts inside the measured area are scored: far outside it the model's
+`gemini-4-argon` is slow: measured from the live logs, its calls had a median of 9 s and 23 s with a p90 of about 65 s, so chat
+uses `gemini-3.8-flash` (about 3 s per call) and Argon is kept for drafting proposals, where a longer wait is fine. Set
+`HEAT_AGENT_MODEL`, `HEAT_ROUTER_MODEL` or `HEAT_PROPOSAL_MODEL` to change any of them. Only tracts inside the measured area are scored: far outside it the model's
 squared-coordinate features extrapolate to tens of degrees. Census "not available" codes (-666666666) are treated as missing.
 
 ## Voice
