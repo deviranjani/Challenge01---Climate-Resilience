@@ -15,7 +15,7 @@ jobs:
   check-internal-stamp:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check CLAUDE.md Version History footer is present
         run: |
           if ! grep -q "bootstrap v" CLAUDE.md; then
